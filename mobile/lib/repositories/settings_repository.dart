@@ -1,0 +1,30 @@
+import 'package:hive_flutter/hive_flutter.dart';
+import '../models/app_settings.dart';
+
+abstract class SettingsRepository {
+  Future<AppSettings> getSettings();
+  Future<void> saveSettings(AppSettings settings);
+}
+
+class HiveSettingsRepository implements SettingsRepository {
+  static const String boxName = 'settings_box';
+  static const String settingsKey = 'app_settings';
+
+  Box get _box => Hive.box(boxName);
+
+  @override
+  Future<AppSettings> getSettings() async {
+    final raw = _box.get(settingsKey);
+    if (raw == null) {
+      final defaultSettings = AppSettings();
+      await saveSettings(defaultSettings);
+      return defaultSettings;
+    }
+    return AppSettings.fromMap(raw as Map);
+  }
+
+  @override
+  Future<void> saveSettings(AppSettings settings) async {
+    await _box.put(settingsKey, settings.toMap());
+  }
+}
