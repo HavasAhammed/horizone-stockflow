@@ -1,6 +1,6 @@
-# mobile
+# StockFlow
 
-A new Flutter project.
+StockFlow mobile application.
 
 ## Getting Started
 

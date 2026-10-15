@@ -101,7 +101,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 _settingTile(
                   icon: Icons.info_outline,
                   title: 'Product',
-                  value: 'Horizone StockFlow',
+                  value: 'StockFlow',
                 ),
                 const Divider(height: 1),
                 _settingTile(
@@ -280,7 +280,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 final confirm = await ConfirmationDialog.show(
                   context: context,
                   title: 'Sign Out?',
-                  message: 'Are you sure you want to sign out of Horizone StockFlow?',
+                  message: 'Are you sure you want to sign out of StockFlow?',
                   confirmText: 'Sign Out',
                   isDestructive: true,
                 );

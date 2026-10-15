@@ -44,7 +44,7 @@ class _MainShellState extends State<MainShell> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
                 Text(
-                  'Horizone StockFlow',
+                  'StockFlow',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
