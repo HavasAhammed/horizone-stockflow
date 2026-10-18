@@ -32,8 +32,27 @@ class InventoryProvider extends ChangeNotifier {
     return list;
   }
 
+  List<PanelItem> get allPanels => _panels;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  int? get wattageFilter => _wattageFilter;
+  PanelStatus? get statusFilter => _statusFilter;
+
+  /// Returns all distinct wattages present in inventory panels plus standard default wattages [540, 450, 400, 330], sorted descending.
+  List<int> get availableWattages {
+    final set = <int>{540, 450, 400, 330};
+    for (final p in _panels) {
+      set.add(p.wattage);
+    }
+    final list = set.toList();
+    list.sort((a, b) => b.compareTo(a));
+    return list;
+  }
+
+  /// Returns the number of currently available panels for a given wattage.
+  int getAvailableCount(int wattage) {
+    return _panels.where((p) => p.wattage == wattage && p.isAvailable).length;
+  }
 
   void setSearchQuery(String query) {
     _searchQuery = query;

@@ -64,17 +64,25 @@ class _SalesListScreenState extends State<SalesListScreen> {
               ),
 
               // Wattage filter chips
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    _filterChip(context, provider, 'All Wattages', null),
-                    _filterChip(context, provider, '540W', 540),
-                    _filterChip(context, provider, '450W', 450),
-                    _filterChip(context, provider, '400W', 400),
-                  ],
-                ),
+              Consumer<InventoryProvider>(
+                builder: (context, inventoryProvider, _) {
+                  final wattages = <int>{
+                    ...provider.distinctWattages,
+                    ...inventoryProvider.availableWattages,
+                  }.toList()
+                    ..sort((a, b) => b.compareTo(a));
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        _filterChip(context, provider, 'All Wattages', null),
+                        ...wattages.map((w) =>
+                            _filterChip(context, provider, '${w}W', w)),
+                      ],
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 8),
 
@@ -210,11 +218,12 @@ class _SalesListScreenState extends State<SalesListScreen> {
 
   Widget _filterChip(
       BuildContext context, SaleProvider provider, String label, int? val) {
+    final isSelected = provider.wattageFilter == val;
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: FilterChip(
         label: Text(label, style: const TextStyle(fontSize: 11)),
-        selected: false,
+        selected: isSelected,
         onSelected: (_) => provider.setWattageFilter(val),
       ),
     );

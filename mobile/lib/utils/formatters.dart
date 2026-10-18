@@ -25,4 +25,19 @@ class Formatters {
         .where((s) => s.isNotEmpty)
         .toList();
   }
+
+  static String formatWattage(int wattage) {
+    switch (wattage) {
+      case 540:
+        return '540W Mono PERC';
+      case 450:
+        return '450W Bifacial';
+      case 400:
+        return '400W High Efficiency';
+      case 330:
+        return '330W Polycrystalline';
+      default:
+        return '${wattage}W Solar Panel';
+    }
+  }
 }

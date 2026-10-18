@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -22,6 +22,12 @@ export const PurchasesPage: React.FC = () => {
   const [wattageFilter, setWattageFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const availableWattages = useMemo(() => {
+    const set = new Set<number>([540, 450, 400, 330]);
+    purchases.forEach((p) => set.add(p.wattage));
+    return Array.from(set).sort((a, b) => b - a);
+  }, [purchases]);
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -206,10 +212,11 @@ export const PurchasesPage: React.FC = () => {
                 onChange={(e) => setWattageFilter(e.target.value)}
               >
                 <option value="">All Wattages</option>
-                <option value="540">540W</option>
-                <option value="450">450W</option>
-                <option value="400">400W</option>
-                <option value="330">330W</option>
+                {availableWattages.map((w) => (
+                  <option key={w} value={w}>
+                    {w}W
+                  </option>
+                ))}
               </select>
             </div>
 

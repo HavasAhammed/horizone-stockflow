@@ -31,6 +31,18 @@ class PurchaseProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  int? get wattageFilter => _wattageFilter;
+  List<PurchaseTransaction> get allPurchases => _purchases;
+
+  List<int> get distinctWattages {
+    final set = <int>{540, 450, 400, 330};
+    for (final p in _purchases) {
+      set.add(p.wattage);
+    }
+    final list = set.toList();
+    list.sort((a, b) => b.compareTo(a));
+    return list;
+  }
 
   void setSearchQuery(String query) {
     _searchQuery = query;

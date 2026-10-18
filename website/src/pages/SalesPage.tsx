@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -11,7 +11,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import type { SaleTransaction, Customer, PanelItem } from '../types';
+import type { SaleTransaction, Customer, PanelItem, StockByWattage } from '../types';
 import { Modal } from '../components/Modal';
 import { Badge } from '../components/Badge';
 
@@ -24,6 +24,8 @@ export const SalesPage: React.FC = () => {
   const [wattageFilter, setWattageFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const [stockByWattage, setStockByWattage] = useState<StockByWattage[]>([]);
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -45,19 +47,45 @@ export const SalesPage: React.FC = () => {
     notes: '',
   });
 
+  const availableWattages = useMemo(() => {
+    const set = new Set<number>([540, 450, 400, 330]);
+    stockByWattage.forEach((s) => set.add(s.wattage));
+    sales.forEach((s) => set.add(s.panelWattage));
+    return Array.from(set).sort((a, b) => b - a);
+  }, [stockByWattage, sales]);
+
+  const getWattageLabel = (wattage: number) => {
+    const stock = stockByWattage.find((s) => s.wattage === wattage);
+    const countInfo = stock ? ` (${stock.availableCount} available)` : '';
+    switch (wattage) {
+      case 540:
+        return `540W Mono PERC${countInfo}`;
+      case 450:
+        return `450W Bifacial${countInfo}`;
+      case 400:
+        return `400W High Efficiency${countInfo}`;
+      case 330:
+        return `330W Polycrystalline${countInfo}`;
+      default:
+        return `${wattage}W Solar Panel${countInfo}`;
+    }
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [salesData, custData] = await Promise.all([
+      const [salesData, custData, stockData] = await Promise.all([
         apiService.getSales({
           search,
           wattage: wattageFilter ? Number(wattageFilter) : undefined,
         }),
         apiService.getCustomers(),
+        apiService.getStockByWattage(),
       ]);
       setSales(salesData);
       setCustomers(custData);
+      setStockByWattage(stockData);
       if (custData.length > 0 && !formData.customerId) {
         setFormData((prev) => ({ ...prev, customerId: custData[0].id }));
       }
@@ -235,9 +263,11 @@ export const SalesPage: React.FC = () => {
                 onChange={(e) => setWattageFilter(e.target.value)}
               >
                 <option value="">All Wattages</option>
-                <option value="540">540W</option>
-                <option value="450">450W</option>
-                <option value="400">400W</option>
+                {availableWattages.map((w) => (
+                  <option key={w} value={w}>
+                    {w}W
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -418,10 +448,11 @@ export const SalesPage: React.FC = () => {
                   })
                 }
               >
-                <option value="540">540W Mono PERC</option>
-                <option value="450">450W Bifacial</option>
-                <option value="400">400W High Efficiency</option>
-                <option value="330">330W Polycrystalline</option>
+                {availableWattages.map((w) => (
+                  <option key={w} value={w}>
+                    {getWattageLabel(w)}
+                  </option>
+                ))}
               </select>
             </div>
 

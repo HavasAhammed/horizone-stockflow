@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Boxes,
   Search,
@@ -19,6 +19,13 @@ export const InventoryPage: React.FC = () => {
   const [batchFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'available' | 'sold' | ''>('');
   const [activeTab, setActiveTab] = useState<'serials' | 'wattage' | 'batches'>('serials');
+
+  const availableWattages = useMemo(() => {
+    const set = new Set<number>([540, 450, 400, 330]);
+    stockByWattage.forEach((s) => set.add(s.wattage));
+    panels.forEach((p) => set.add(p.wattage));
+    return Array.from(set).sort((a, b) => b - a);
+  }, [stockByWattage, panels]);
 
   const loadInventory = async () => {
     try {
@@ -117,9 +124,11 @@ export const InventoryPage: React.FC = () => {
                     onChange={(e) => setWattageFilter(e.target.value)}
                   >
                     <option value="">All Wattages</option>
-                    <option value="540">540W</option>
-                    <option value="450">450W</option>
-                    <option value="400">400W</option>
+                    {availableWattages.map((w) => (
+                      <option key={w} value={w}>
+                        {w}W
+                      </option>
+                    ))}
                   </select>
                 </div>
 

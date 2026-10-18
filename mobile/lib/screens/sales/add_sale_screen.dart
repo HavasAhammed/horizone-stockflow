@@ -35,8 +35,22 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       context.read<CustomerProvider>().loadCustomers();
+      await context.read<InventoryProvider>().loadPanels();
+      if (!mounted) return;
+
+      final inv = context.read<InventoryProvider>();
+      // If default 540 has 0 in stock, switch to the first wattage that has available stock
+      if (inv.getAvailableCount(_selectedWattage) == 0) {
+        final withStock =
+            inv.availableWattages.where((w) => inv.getAvailableCount(w) > 0);
+        if (withStock.isNotEmpty) {
+          setState(() {
+            _selectedWattage = withStock.first;
+          });
+        }
+      }
       _fetchAvailablePanels();
     });
   }
@@ -149,6 +163,8 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
   @override
   Widget build(BuildContext context) {
     final customers = context.watch<CustomerProvider>().customers;
+    final inventory = context.watch<InventoryProvider>();
+    final availableWattages = inventory.availableWattages;
 
     Customer? selectedCustomer;
     if (_selectedCustomerId != null && customers.isNotEmpty) {
@@ -286,20 +302,35 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
 
             // Wattage Selector Dropdown
             DropdownButtonFormField<int>(
-              initialValue: _selectedWattage,
+              key: ValueKey(_selectedWattage),
+              initialValue: availableWattages.contains(_selectedWattage)
+                  ? _selectedWattage
+                  : (availableWattages.isNotEmpty ? availableWattages.first : 540),
               decoration: const InputDecoration(
                 labelText: 'Panel Wattage (W) *',
                 prefixIcon: Icon(Icons.solar_power),
               ),
-              items: const [
-                DropdownMenuItem(value: 540, child: Text('540W Mono PERC')),
-                DropdownMenuItem(value: 450, child: Text('450W Bifacial')),
-                DropdownMenuItem(value: 400, child: Text('400W High Efficiency')),
-                DropdownMenuItem(value: 330, child: Text('330W Polycrystalline')),
-              ],
+              items: availableWattages.map((w) {
+                final inStock = inventory.getAvailableCount(w);
+                final stockSuffix =
+                    inStock > 0 ? ' ($inStock available)' : ' (0 available)';
+                return DropdownMenuItem<int>(
+                  value: w,
+                  child: Text(
+                    '${Formatters.formatWattage(w)}$stockSuffix',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: inStock > 0 ? AppColors.textMain : AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }).toList(),
               onChanged: (val) {
-                if (val != null) {
-                  setState(() => _selectedWattage = val);
+                if (val != null && val != _selectedWattage) {
+                  setState(() {
+                    _selectedWattage = val;
+                    _selectedSerials.clear();
+                  });
                   _fetchAvailablePanels();
                 }
               },

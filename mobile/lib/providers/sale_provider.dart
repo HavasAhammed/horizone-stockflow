@@ -31,6 +31,18 @@ class SaleProvider extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  int? get wattageFilter => _wattageFilter;
+  List<SaleTransaction> get allSales => _sales;
+
+  List<int> get distinctWattages {
+    final set = <int>{540, 450, 400, 330};
+    for (final s in _sales) {
+      set.add(s.panelWattage);
+    }
+    final list = set.toList();
+    list.sort((a, b) => b.compareTo(a));
+    return list;
+  }
 
   void setSearchQuery(String query) {
     _searchQuery = query;
