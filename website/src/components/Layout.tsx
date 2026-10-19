@@ -139,7 +139,7 @@ export const Layout: React.FC = () => {
           </div>
 
           <div className="header-actions">
-            <NavLink to="/settings" className="header-user-badge" title={userEmail || 'user@gmail.com'}>
+            <NavLink to="/settings" className="header-user-badge" title={userEmail || 'user@horizone.com'}>
               <div className="user-avatar-circle">
                 <Sun size={14} />
               </div>

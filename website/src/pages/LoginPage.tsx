@@ -7,7 +7,7 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('user@gmail.com');
+  const [email, setEmail] = useState('user@horizone.com');
   const [password, setPassword] = useState('user123');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,7 +30,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleAutofill = () => {
-    setEmail('user@gmail.com');
+    setEmail('user@horizone.com');
     setPassword('user123');
     setError(null);
   };
@@ -116,7 +116,7 @@ export const LoginPage: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="user@gmail.com"
+                placeholder="user@horizone.com"
                 style={{
                   width: '100%',
                   padding: '10px 14px 10px 40px',
@@ -190,7 +190,7 @@ export const LoginPage: React.FC = () => {
               </button>
             </div>
             <div style={{ fontSize: '11px', fontFamily: 'monospace', color: '#334155' }}>
-              user@gmail.com / user123
+              user@horizone.com / user123
             </div>
           </div>
 

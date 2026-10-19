@@ -17,7 +17,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return localStorage.getItem(AUTH_STORAGE_KEY) === 'true';
   });
   const [userEmail, setUserEmail] = useState<string | null>(() => {
-    return localStorage.getItem('stockflow_user_email') || (isLoggedIn ? 'user@gmail.com' : null);
+    return localStorage.getItem('stockflow_user_email') || (isLoggedIn ? 'user@horizone.com' : null);
   });
   const [userName, setUserName] = useState<string | null>(() => {
     return localStorage.getItem('stockflow_user_name') || (isLoggedIn ? 'Stock Manager' : null);
@@ -31,12 +31,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Please enter both email and password' };
     }
 
-    if (cleanEmail === 'user@gmail.com' && cleanPass === 'user123') {
+    if (cleanEmail === 'user@horizone.com' && cleanPass === 'user123') {
       setIsLoggedIn(true);
-      setUserEmail('user@gmail.com');
+      setUserEmail('user@horizone.com');
       setUserName('Stock Manager');
       localStorage.setItem(AUTH_STORAGE_KEY, 'true');
-      localStorage.setItem('stockflow_user_email', 'user@gmail.com');
+      localStorage.setItem('stockflow_user_email', 'user@horizone.com');
       localStorage.setItem('stockflow_user_name', 'Stock Manager');
       return { success: true };
     } else {

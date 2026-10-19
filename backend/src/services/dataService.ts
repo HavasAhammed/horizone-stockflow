@@ -1,4 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
+import mongoose from 'mongoose';
+import { CustomerModel } from '../models/Customer.js';
+import { PanelModel } from '../models/Panel.js';
+import { PurchaseModel } from '../models/Purchase.js';
+import { SaleModel } from '../models/Sale.js';
 import {
   Customer,
   PurchaseTransaction,
@@ -14,10 +19,138 @@ export class DataService {
   private purchases: Map<string, PurchaseTransaction> = new Map();
   private sales: Map<string, SaleTransaction> = new Map();
   private panels: Map<string, PanelItem> = new Map(); // key is serialNumber
-  private lowStockThreshold: number = 10;
+  private lowStockThreshold: number = parseInt(process.env.LOW_STOCK_THRESHOLD || '100', 10);
 
   constructor() {
     this.seedInitialData();
+  }
+
+  public async initDatabase(uri?: string) {
+    const mongoUri = uri || process.env.MONGODB_URI;
+    if (!mongoUri) return;
+
+    try {
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
+        console.log('⚡ Connected to MongoDB Atlas:', mongoose.connection.name);
+      }
+
+      const customerCount = await CustomerModel.countDocuments();
+      if (customerCount > 0) {
+        console.log(`⚡ Hydrating in-memory store from MongoDB Atlas (${customerCount} customers found)...`);
+        await this.hydrateFromMongo();
+      } else {
+        console.log('⚡ Clean database ready for real-world production usage.');
+      }
+    } catch (err: any) {
+      console.warn('⚠️ MongoDB Atlas connection notice (using memory store):', err.message);
+    }
+  }
+
+  private async hydrateFromMongo() {
+    try {
+      const [customers, panels, purchases, sales] = await Promise.all([
+        CustomerModel.find().lean(),
+        PanelModel.find().lean(),
+        PurchaseModel.find().lean(),
+        SaleModel.find().lean(),
+      ]);
+
+      if (customers.length > 0) {
+        this.customers.clear();
+        for (const c of customers) {
+          this.customers.set(c.id, {
+            id: c.id,
+            consumerNumber: c.consumerNumber,
+            phone: c.phone,
+            name: c.name,
+            address: c.address,
+            createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : new Date().toISOString(),
+            updatedAt: c.updatedAt ? new Date(c.updatedAt).toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+
+      if (panels.length > 0) {
+        this.panels.clear();
+        for (const p of panels) {
+          this.panels.set(p.serialNumber, {
+            id: p.id,
+            serialNumber: p.serialNumber,
+            batchNumber: p.batchNumber,
+            wattage: p.wattage,
+            purchaseId: p.purchaseId,
+            purchasePrice: p.purchasePrice,
+            status: p.status as 'available' | 'sold',
+            saleId: p.saleId,
+            createdAt: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
+            updatedAt: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+
+      if (purchases.length > 0) {
+        this.purchases.clear();
+        for (const pu of purchases) {
+          this.purchases.set(pu.id, {
+            id: pu.id,
+            purchaseDate: pu.purchaseDate ? new Date(pu.purchaseDate).toISOString() : new Date().toISOString(),
+            supplierName: pu.supplierName,
+            batchNumber: pu.batchNumber,
+            wattage: pu.wattage,
+            quantity: pu.quantity,
+            serialNumbers: pu.serialNumbers,
+            unitPurchasePrice: pu.unitPurchasePrice,
+            totalPurchaseAmount: pu.totalPurchaseAmount,
+            notes: pu.notes,
+            createdAt: pu.createdAt ? new Date(pu.createdAt).toISOString() : new Date().toISOString(),
+            updatedAt: pu.updatedAt ? new Date(pu.updatedAt).toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+
+      if (sales.length > 0) {
+        this.sales.clear();
+        for (const s of sales) {
+          this.sales.set(s.id, {
+            id: s.id,
+            saleDate: s.saleDate ? new Date(s.saleDate).toISOString() : new Date().toISOString(),
+            customerId: s.customerId,
+            consumerNumber: s.consumerNumber,
+            customerName: s.customerName,
+            panelWattage: s.panelWattage,
+            quantity: s.quantity,
+            serialNumbers: s.serialNumbers,
+            unitSellingPrice: s.unitSellingPrice,
+            totalSellingAmount: s.totalSellingAmount,
+            notes: s.notes,
+            createdAt: s.createdAt ? new Date(s.createdAt).toISOString() : new Date().toISOString(),
+            updatedAt: s.updatedAt ? new Date(s.updatedAt).toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ Error hydrating from MongoDB:', err.message);
+    }
+  }
+
+  private async syncToMongo() {
+    try {
+      for (const c of this.customers.values()) {
+        await CustomerModel.findOneAndUpdate({ id: c.id }, c, { upsert: true });
+      }
+      for (const p of this.panels.values()) {
+        await PanelModel.findOneAndUpdate({ serialNumber: p.serialNumber }, p, { upsert: true });
+      }
+      for (const pu of this.purchases.values()) {
+        await PurchaseModel.findOneAndUpdate({ id: pu.id }, pu, { upsert: true });
+      }
+      for (const s of this.sales.values()) {
+        await SaleModel.findOneAndUpdate({ id: s.id }, s, { upsert: true });
+      }
+    } catch (e: any) {
+      console.warn('⚠️ Sync to MongoDB error:', e.message);
+    }
   }
 
   public setLowStockThreshold(threshold: number) {
@@ -32,153 +165,21 @@ export class DataService {
 
   // --- SEED DATA ---
   private seedInitialData() {
-    // 1. Initial Customers (Kerala KSEB consumers)
-    const c1: Customer = {
-      id: 'cust-101',
-      consumerNumber: '1155443322110',
-      phone: '+91 98470 12345',
-      name: 'Venu Gopal Nair',
-      address: 'TC 14/820, Sasthamangalam, Thiruvananthapuram',
-      createdAt: '2026-03-01T10:00:00.000Z',
-      updatedAt: '2026-03-01T10:00:00.000Z',
-    };
-    const c2: Customer = {
-      id: 'cust-102',
-      consumerNumber: '1155998877665',
-      phone: '+91 94471 56789',
-      name: 'Anjali Menon',
-      address: 'Green Villa, Marine Drive, Kochi',
-      createdAt: '2026-03-10T11:30:00.000Z',
-      updatedAt: '2026-03-10T11:30:00.000Z',
-    };
-    const c3: Customer = {
-      id: 'cust-103',
-      consumerNumber: '1155332211998',
-      phone: '+91 97450 88221',
-      name: 'Muhammed Shafi',
-      address: 'Maniyarath House, Bypass Road, Calicut',
-      createdAt: '2026-03-15T09:15:00.000Z',
-      updatedAt: '2026-03-15T09:15:00.000Z',
-    };
+    // Clean initial state for real-world production usage
+  }
 
-    this.customers.set(c1.id, c1);
-    this.customers.set(c2.id, c2);
-    this.customers.set(c3.id, c3);
-
-    // 2. Initial Purchase: 540W panels (Batch B-540-01)
-    const p1Id = 'purch-201';
-    const p1Serials = [
-      'HZ-540-26A01',
-      'HZ-540-26A02',
-      'HZ-540-26A03',
-      'HZ-540-26A04',
-      'HZ-540-26A05',
-      'HZ-540-26A06',
-      'HZ-540-26A07',
-      'HZ-540-26A08',
-      'HZ-540-26A09',
-      'HZ-540-26A10',
-      'HZ-540-26A11',
-      'HZ-540-26A12',
-    ];
-    const p1: PurchaseTransaction = {
-      id: p1Id,
-      purchaseDate: '2026-03-05T08:00:00.000Z',
-      supplierName: 'Tata Power Solar Systems',
-      batchNumber: 'BATCH-540-A1',
-      wattage: 540,
-      quantity: 12,
-      serialNumbers: p1Serials,
-      unitPurchasePrice: 11500,
-      totalPurchaseAmount: 138000,
-      notes: 'Tier 1 Mono PERC 540W panels for residential project installations',
-      createdAt: '2026-03-05T08:00:00.000Z',
-      updatedAt: '2026-03-05T08:00:00.000Z',
-    };
-    this.purchases.set(p1.id, p1);
-    for (const sn of p1Serials) {
-      this.panels.set(sn, {
-        id: `pnl-${sn}`,
-        serialNumber: sn,
-        batchNumber: p1.batchNumber,
-        wattage: p1.wattage,
-        purchaseId: p1.id,
-        purchasePrice: p1.unitPurchasePrice,
-        status: 'available',
-        saleId: null,
-        createdAt: p1.purchaseDate,
-        updatedAt: p1.purchaseDate,
-      });
-    }
-
-    // 3. Second Purchase: 450W panels (Batch B-450-B1)
-    const p2Id = 'purch-202';
-    const p2Serials = [
-      'HZ-450-26B01',
-      'HZ-450-26B02',
-      'HZ-450-26B03',
-      'HZ-450-26B04',
-      'HZ-450-26B05',
-      'HZ-450-26B06',
-      'HZ-450-26B07',
-      'HZ-450-26B08',
-    ];
-    const p2: PurchaseTransaction = {
-      id: p2Id,
-      purchaseDate: '2026-03-12T09:30:00.000Z',
-      supplierName: 'Waaree Energies Ltd',
-      batchNumber: 'BATCH-450-B1',
-      wattage: 450,
-      quantity: 8,
-      serialNumbers: p2Serials,
-      unitPurchasePrice: 9200,
-      totalPurchaseAmount: 73600,
-      notes: 'Bifacial 450W panels for KSEB on-grid setup',
-      createdAt: '2026-03-12T09:30:00.000Z',
-      updatedAt: '2026-03-12T09:30:00.000Z',
-    };
-    this.purchases.set(p2.id, p2);
-    for (const sn of p2Serials) {
-      this.panels.set(sn, {
-        id: `pnl-${sn}`,
-        serialNumber: sn,
-        batchNumber: p2.batchNumber,
-        wattage: p2.wattage,
-        purchaseId: p2.id,
-        purchasePrice: p2.unitPurchasePrice,
-        status: 'available',
-        saleId: null,
-        createdAt: p2.purchaseDate,
-        updatedAt: p2.purchaseDate,
-      });
-    }
-
-    // 4. Initial Sale: 4 panels of 540W to Customer 1
-    const s1Id = 'sale-301';
-    const s1Serials = ['HZ-540-26A01', 'HZ-540-26A02', 'HZ-540-26A03', 'HZ-540-26A04'];
-    const s1: SaleTransaction = {
-      id: s1Id,
-      saleDate: '2026-03-18T14:20:00.000Z',
-      customerId: c1.id,
-      consumerNumber: c1.consumerNumber,
-      customerName: c1.name,
-      panelWattage: 540,
-      quantity: s1Serials.length,
-      serialNumbers: s1Serials,
-      unitSellingPrice: 14200,
-      totalSellingAmount: 56800,
-      notes: '3kW On-Grid Rooftop solar installation phase 1',
-      createdAt: '2026-03-18T14:20:00.000Z',
-      updatedAt: '2026-03-18T14:20:00.000Z',
-    };
-    this.sales.set(s1.id, s1);
-    for (const sn of s1Serials) {
-      const panel = this.panels.get(sn);
-      if (panel) {
-        panel.status = 'sold';
-        panel.saleId = s1.id;
-        panel.updatedAt = s1.saleDate;
-      }
+  public async clearAllData() {
+    this.customers.clear();
+    this.purchases.clear();
+    this.sales.clear();
+    this.panels.clear();
+    if (mongoose.connection.readyState === 1) {
+      await Promise.all([
+        CustomerModel.deleteMany({}),
+        PanelModel.deleteMany({}),
+        PurchaseModel.deleteMany({}),
+        SaleModel.deleteMany({}),
+      ]);
     }
   }
 
@@ -239,6 +240,11 @@ export class DataService {
     };
 
     this.customers.set(customer.id, customer);
+    if (mongoose.connection.readyState === 1) {
+      CustomerModel.create(customer).catch((e) =>
+        console.warn('Mongo create customer err:', e.message)
+      );
+    }
     return customer;
   }
 
@@ -288,6 +294,11 @@ export class DataService {
 
     customer.updatedAt = new Date().toISOString();
     this.customers.set(customer.id, customer);
+    if (mongoose.connection.readyState === 1) {
+      CustomerModel.findOneAndUpdate({ id: customer.id }, customer).catch((e) =>
+        console.warn('Mongo update customer err:', e.message)
+      );
+    }
     return customer;
   }
 
@@ -306,6 +317,11 @@ export class DataService {
     }
 
     this.customers.delete(id);
+    if (mongoose.connection.readyState === 1) {
+      CustomerModel.deleteOne({ id }).catch((e) =>
+        console.warn('Mongo delete customer err:', e.message)
+      );
+    }
     return true;
   }
 
@@ -410,6 +426,7 @@ export class DataService {
     this.purchases.set(purchase.id, purchase);
 
     // Atomically create panel records
+    const newPanels: PanelItem[] = [];
     for (const sn of serials) {
       const panel: PanelItem = {
         id: uuidv4(),
@@ -424,6 +441,16 @@ export class DataService {
         updatedAt: purchaseDate,
       };
       this.panels.set(sn, panel);
+      newPanels.push(panel);
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      PurchaseModel.create(purchase).catch((e) =>
+        console.warn('Mongo create purchase err:', e.message)
+      );
+      PanelModel.insertMany(newPanels).catch((e) =>
+        console.warn('Mongo insert panels err:', e.message)
+      );
     }
 
     return purchase;
@@ -476,6 +503,21 @@ export class DataService {
 
     purchase.updatedAt = new Date().toISOString();
     this.purchases.set(purchase.id, purchase);
+
+    if (mongoose.connection.readyState === 1) {
+      PurchaseModel.findOneAndUpdate({ id: purchase.id }, purchase).catch((e) =>
+        console.warn('Mongo update purchase err:', e.message)
+      );
+      PanelModel.updateMany(
+        { serialNumber: { $in: purchase.serialNumbers } },
+        {
+          batchNumber: purchase.batchNumber,
+          purchasePrice: purchase.unitPurchasePrice,
+          updatedAt: purchase.updatedAt,
+        }
+      ).catch((e) => console.warn('Mongo update panels err:', e.message));
+    }
+
     return purchase;
   }
 
@@ -503,6 +545,16 @@ export class DataService {
     }
 
     this.purchases.delete(id);
+
+    if (mongoose.connection.readyState === 1) {
+      PurchaseModel.deleteOne({ id }).catch((e) =>
+        console.warn('Mongo delete purchase err:', e.message)
+      );
+      PanelModel.deleteMany({ serialNumber: { $in: purchase.serialNumbers } }).catch(
+        (e) => console.warn('Mongo delete panels err:', e.message)
+      );
+    }
+
     return true;
   }
 
@@ -605,6 +657,16 @@ export class DataService {
       panel.updatedAt = now;
     }
 
+    if (mongoose.connection.readyState === 1) {
+      SaleModel.create(sale).catch((e) =>
+        console.warn('Mongo create sale err:', e.message)
+      );
+      PanelModel.updateMany(
+        { serialNumber: { $in: serials } },
+        { status: 'sold', saleId: sale.id, updatedAt: now }
+      ).catch((e) => console.warn('Mongo update sold panels err:', e.message));
+    }
+
     return sale;
   }
 
@@ -701,6 +763,24 @@ export class DataService {
     sale.totalSellingAmount = Math.round(sale.quantity * sale.unitSellingPrice * 100) / 100;
     sale.updatedAt = new Date().toISOString();
     this.sales.set(sale.id, sale);
+
+    if (mongoose.connection.readyState === 1) {
+      SaleModel.findOneAndUpdate({ id: sale.id }, sale).catch((e) =>
+        console.warn('Mongo update sale err:', e.message)
+      );
+      PanelModel.updateMany(
+        { saleId: sale.id },
+        { status: 'available', saleId: null, updatedAt: sale.updatedAt }
+      )
+        .then(() =>
+          PanelModel.updateMany(
+            { serialNumber: { $in: sale.serialNumbers } },
+            { status: 'sold', saleId: sale.id, updatedAt: sale.updatedAt }
+          )
+        )
+        .catch((e) => console.warn('Mongo update sale panels err:', e.message));
+    }
+
     return sale;
   }
 
@@ -722,6 +802,17 @@ export class DataService {
     }
 
     this.sales.delete(id);
+
+    if (mongoose.connection.readyState === 1) {
+      SaleModel.deleteOne({ id }).catch((e) =>
+        console.warn('Mongo delete sale err:', e.message)
+      );
+      PanelModel.updateMany(
+        { serialNumber: { $in: sale.serialNumbers } },
+        { status: 'available', saleId: null, updatedAt: now }
+      ).catch((e) => console.warn('Mongo revert sold panels err:', e.message));
+    }
+
     return true;
   }
 

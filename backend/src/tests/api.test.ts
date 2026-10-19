@@ -73,8 +73,32 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
     });
 
     it('prevents unsafe deletion of customer with linked sales', async () => {
-      // cust-101 has seeded sale 'sale-301'
-      const res = await request(app).delete('/api/v1/customers/cust-101');
+      // Create test customer
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '9988776611223',
+        phone: '+91 98470 99999',
+        name: 'Linked Sale Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      // Create test purchase
+      await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-LINK-TEST',
+        wattage: 540,
+        quantity: 1,
+        unitPurchasePrice: 10000,
+        serialNumbers: ['SN-LINK-TEST-001'],
+      });
+
+      // Create test sale
+      await request(app).post('/api/v1/sales').send({
+        customerId: custId,
+        panelWattage: 540,
+        unitSellingPrice: 13000,
+        serialNumbers: ['SN-LINK-TEST-001'],
+      });
+
+      const res = await request(app).delete(`/api/v1/customers/${custId}`);
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error).toMatch(/linked sale transaction/i);
@@ -142,8 +166,30 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
     });
 
     it('prevents deleting purchase if panels have been sold', async () => {
-      // purch-201 contains panels that were sold in sale-301
-      const res = await request(app).delete('/api/v1/purchases/purch-201');
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '8877665544332',
+        phone: '+91 98470 88888',
+        name: 'Sold Purchase Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      const purchRes = await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-DEL-PURCH-TEST',
+        wattage: 540,
+        quantity: 1,
+        unitPurchasePrice: 10000,
+        serialNumbers: ['SN-DEL-PURCH-001'],
+      });
+      const purchId = purchRes.body.data.id;
+
+      await request(app).post('/api/v1/sales').send({
+        customerId: custId,
+        panelWattage: 540,
+        unitSellingPrice: 13000,
+        serialNumbers: ['SN-DEL-PURCH-001'],
+      });
+
+      const res = await request(app).delete(`/api/v1/purchases/${purchId}`);
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.error).toMatch(/have already been sold/i);
@@ -152,7 +198,13 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
 
   describe('Sales Allocation & Inventory Deduction', () => {
     it('successfully sells available panels and updates inventory', async () => {
-      // Add a test purchase first
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '7766554433221',
+        phone: '+91 98470 77777',
+        name: 'Sale Test Cust',
+      });
+      const custId = custRes.body.data.id;
+
       const purchaseRes = await request(app).post('/api/v1/purchases').send({
         batchNumber: 'BATCH-SALE-TEST',
         wattage: 400,
@@ -166,9 +218,9 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
       const panelBefore = await request(app).get('/api/v1/inventory?search=SALE-TEST-SN-1');
       expect(panelBefore.body.data[0].status).toBe('available');
 
-      // Sell one panel to c2 (cust-102)
+      // Sell one panel
       const saleRes = await request(app).post('/api/v1/sales').send({
-        customerId: 'cust-102',
+        customerId: custId,
         panelWattage: 400,
         unitSellingPrice: 11500,
         serialNumbers: ['SALE-TEST-SN-1'],
@@ -185,41 +237,90 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
     });
 
     it('rejects selling a panel that is already sold', async () => {
-      // HZ-540-26A01 was already sold in seed sale-301
-      const res = await request(app).post('/api/v1/sales').send({
-        customerId: 'cust-102',
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '6655443322110',
+        phone: '+91 98470 66666',
+        name: 'Double Sell Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-DOUBLE-SELL',
+        wattage: 540,
+        quantity: 1,
+        unitPurchasePrice: 10000,
+        serialNumbers: ['SN-DOUBLE-SELL-1'],
+      });
+
+      await request(app).post('/api/v1/sales').send({
+        customerId: custId,
         panelWattage: 540,
-        unitSellingPrice: 15000,
-        serialNumbers: ['HZ-540-26A01'],
+        unitSellingPrice: 13000,
+        serialNumbers: ['SN-DOUBLE-SELL-1'],
+      });
+
+      const res = await request(app).post('/api/v1/sales').send({
+        customerId: custId,
+        panelWattage: 540,
+        unitSellingPrice: 13000,
+        serialNumbers: ['SN-DOUBLE-SELL-1'],
       });
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/already marked as sold/i);
     });
 
     it('rejects selling panel with mismatched wattage', async () => {
-      // HZ-450-26B01 is 450W
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '5544332211009',
+        phone: '+91 98470 55555',
+        name: 'Wattage Mismatch Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-WATT-TEST',
+        wattage: 450,
+        quantity: 1,
+        unitPurchasePrice: 9000,
+        serialNumbers: ['SN-WATT-450-TEST'],
+      });
+
       const res = await request(app).post('/api/v1/sales').send({
-        customerId: 'cust-102',
+        customerId: custId,
         panelWattage: 540, // mismatch
         unitSellingPrice: 15000,
-        serialNumbers: ['HZ-450-26B01'],
+        serialNumbers: ['SN-WATT-450-TEST'],
       });
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/does not match requested sale wattage/i);
     });
 
     it('reconciles inventory when a sale is deleted', async () => {
-      // Create sale of HZ-450-26B08 (available 450W panel)
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '4433221100998',
+        phone: '+91 98470 44444',
+        name: 'Sale Delete Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-RECONCILE',
+        wattage: 450,
+        quantity: 1,
+        unitPurchasePrice: 9000,
+        serialNumbers: ['SN-RECONCILE-TEST'],
+      });
+
       const saleRes = await request(app).post('/api/v1/sales').send({
-        customerId: 'cust-103',
+        customerId: custId,
         panelWattage: 450,
         unitSellingPrice: 12000,
-        serialNumbers: ['HZ-450-26B08'],
+        serialNumbers: ['SN-RECONCILE-TEST'],
       });
       expect(saleRes.status).toBe(201);
 
       // Check status is sold
-      let panel = await request(app).get('/api/v1/inventory?search=HZ-450-26B08');
+      let panel = await request(app).get('/api/v1/inventory?search=SN-RECONCILE-TEST');
       expect(panel.body.data[0].status).toBe('sold');
 
       // Delete the sale
@@ -227,7 +328,7 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
       expect(delRes.status).toBe(200);
 
       // Verify panel is restored to 'available'
-      panel = await request(app).get('/api/v1/inventory?search=HZ-450-26B08');
+      panel = await request(app).get('/api/v1/inventory?search=SN-RECONCILE-TEST');
       expect(panel.body.data[0].status).toBe('available');
       expect(panel.body.data[0].saleId).toBeNull();
     });
@@ -235,6 +336,14 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
 
   describe('Inventory Grouping & Dashboard Reporting', () => {
     it('groups inventory correctly by wattage', async () => {
+      await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-GROUP-TEST',
+        wattage: 540,
+        quantity: 1,
+        unitPurchasePrice: 10000,
+        serialNumbers: ['SN-GROUP-540-1'],
+      });
+
       const res = await request(app).get('/api/v1/inventory/by-wattage');
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
