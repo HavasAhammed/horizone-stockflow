@@ -416,61 +416,26 @@ class InventoryService {
 
   // Initial Seed for Offline Demo
   Future<void> seedIfEmpty() async {
-    final existingPanels = await panelRepository.getAllPanels();
-    if (existingPanels.isNotEmpty) return;
+    // Clean initial state for real-world production usage
+  }
 
-    // Seed Customers
-    final c1 = await createCustomer(
-      consumerNumber: '1155443322110',
-      phone: '+91 98470 12345',
-      name: 'Venu Gopal Nair',
-      address: 'Sasthamangalam, Thiruvananthapuram',
-    );
-    await createCustomer(
-      consumerNumber: '1155998877665',
-      phone: '+91 94471 56789',
-      name: 'Anjali Menon',
-      address: 'Marine Drive, Kochi',
-    );
+  Future<void> clearAllData() async {
+    final panels = await panelRepository.getAllPanels();
+    await panelRepository.deletePanels(panels.map((p) => p.serialNumber).toList());
 
-    // Seed Purchases
-    await createPurchase(
-      purchaseDate: DateTime.now().subtract(const Duration(days: 15)),
-      supplierName: 'Tata Power Solar Systems',
-      batchNumber: 'BATCH-540-A1',
-      wattage: 540,
-      quantity: 12,
-      serialNumbers: List.generate(
-          12, (i) => 'HZ-540-26A${(i + 1).toString().padLeft(2, '0')}'),
-      unitPurchasePrice: 11500,
-      notes: 'Tier 1 Mono PERC 540W solar panels',
-    );
+    final purchases = await purchaseRepository.getAllPurchases();
+    for (final p in purchases) {
+      await purchaseRepository.deletePurchase(p.id);
+    }
 
-    await createPurchase(
-      purchaseDate: DateTime.now().subtract(const Duration(days: 10)),
-      supplierName: 'Waaree Energies Ltd',
-      batchNumber: 'BATCH-450-B1',
-      wattage: 450,
-      quantity: 8,
-      serialNumbers: List.generate(
-          8, (i) => 'HZ-450-26B${(i + 1).toString().padLeft(2, '0')}'),
-      unitPurchasePrice: 9200,
-      notes: 'Bifacial 450W panels for KSEB setups',
-    );
+    final sales = await saleRepository.getAllSales();
+    for (final s in sales) {
+      await saleRepository.deleteSale(s.id);
+    }
 
-    // Seed Sale (4 panels of 540W)
-    await createSale(
-      saleDate: DateTime.now().subtract(const Duration(days: 3)),
-      customerId: c1.id,
-      panelWattage: 540,
-      serialNumbers: [
-        'HZ-540-26A01',
-        'HZ-540-26A02',
-        'HZ-540-26A03',
-        'HZ-540-26A04',
-      ],
-      unitSellingPrice: 14200,
-      notes: '3kW On-Grid Rooftop Phase 1',
-    );
+    final customers = await customerRepository.getAllCustomers();
+    for (final c in customers) {
+      await customerRepository.deleteCustomer(c.id);
+    }
   }
 }

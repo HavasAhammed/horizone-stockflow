@@ -14,7 +14,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _emailController = TextEditingController(text: 'user@gmail.com');
+  final _emailController = TextEditingController(text: 'user@horizone.com');
   final _passwordController = TextEditingController(text: 'user123');
 
   bool _obscurePassword = true;
@@ -51,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _autofillCredentials() {
     setState(() {
-      _emailController.text = 'user@gmail.com';
+      _emailController.text = 'user@horizone.com';
       _passwordController.text = 'user123';
     });
   }
@@ -269,7 +269,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Email: user@gmail.com  |  Pass: user123',
+                            'Email: user@horizone.com  |  Pass: user123',
                             style: TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 11,

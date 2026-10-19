@@ -23,8 +23,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   void initState() {
     super.initState();
     final settings = context.read<SettingsProvider>().settings;
-    _thresholdController =
-        TextEditingController(text: settings.lowStockThreshold.toString());
+    _thresholdController = TextEditingController(
+      text: settings.lowStockThreshold.toString(),
+    );
     _apiUrlController = TextEditingController(text: settings.apiBaseUrl);
   }
 
@@ -40,9 +41,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     final settings = context.watch<SettingsProvider>().settings;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile & Settings'),
-      ),
+      appBar: AppBar(title: const Text('Profile & Settings')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -55,8 +54,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   CircleAvatar(
                     radius: 30,
                     backgroundColor: AppColors.primaryBlueLight,
-                    child: const Icon(Icons.person,
-                        color: AppColors.primaryBlue, size: 36),
+                    child: const Icon(
+                      Icons.person,
+                      color: AppColors.primaryBlue,
+                      size: 36,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -73,7 +75,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          context.watch<AuthProvider>().userEmail ?? 'user@gmail.com',
+                          context.watch<AuthProvider>().userEmail ??
+                              'user@horizone.com',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -163,9 +166,8 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                             final parsed = int.tryParse(val);
                             if (parsed != null && parsed >= 0) {
                               context.read<SettingsProvider>().updateSettings(
-                                    settings.copyWith(
-                                        lowStockThreshold: parsed),
-                                  );
+                                settings.copyWith(lowStockThreshold: parsed),
+                              );
                               context.read<DashboardProvider>().loadDashboard();
                             }
                           },
@@ -177,86 +179,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
 
-          // Backend API Configuration
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Backend API Endpoint',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textMain,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Configured URL for future multi-device synchronization:',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _apiUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'API Base URL',
-                      hintText: 'http://localhost:5050/api/v1',
-                      prefixIcon: Icon(Icons.cloud_outlined),
-                    ),
-                    onSubmitted: (val) {
-                      context.read<SettingsProvider>().updateSettings(
-                            settings.copyWith(apiBaseUrl: val.trim()),
-                          );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Storage Mode & Architectural Notice
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.solarAmberLight,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.solarAmber.withValues(alpha: 0.5)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Row(
-                  children: [
-                    Icon(Icons.shield_outlined,
-                        color: AppColors.solarAmber, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'Local Storage Notice',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF92400E),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Hive offline local storage is currently active on this device. Data is securely persisted on this device between app restarts. Hive data on one device is not automatically shared with another device or the website until the shared database (PostgreSQL/MongoDB) is connected.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF92400E),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 20),
 
           // Sign Out Action
@@ -309,7 +232,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primaryBlue, size: 20),
-      title: Text(title, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+      ),
       trailing: Text(
         value,
         style: const TextStyle(

@@ -5,6 +5,7 @@ import '../providers/dashboard_provider.dart';
 import '../providers/customer_provider.dart';
 import '../providers/purchase_provider.dart';
 import '../providers/sale_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/badge_widget.dart';
 import '../utils/formatters.dart';
@@ -45,6 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final lowStock = provider.lowStockAlerts;
         final byWattage = provider.byWattage;
+        final lowStockThreshold =
+            context.watch<SettingsProvider>().settings.lowStockThreshold;
 
         return RefreshIndicator(
           onRefresh: () async => _refreshAll(),
@@ -253,7 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           final availableAmount =
                               (counts['availableAmount'] as num?)?.toDouble() ??
                                   0.0;
-                          final isLow = availableCount <= 10;
+                          final isLow = availableCount <= lowStockThreshold;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Row(

@@ -8,7 +8,7 @@ class AuthProvider extends ChangeNotifier {
   static const String keyUserName = 'user_name';
 
   // Demo stock manager credentials
-  static const String defaultEmail = 'user@gmail.com';
+  static const String defaultEmail = 'user@horizone.com';
   static const String defaultPassword = 'user123';
 
   bool _isLoggedIn = false;

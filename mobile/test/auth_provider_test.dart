@@ -10,24 +10,24 @@ void main() {
       expect(auth.errorMessage, null);
     });
 
-    test('Valid credentials succeed with user@gmail.com and user123', () async {
+    test('Valid credentials succeed with user@horizone.com and user123', () async {
       final auth = AuthProvider();
-      final result = await auth.login('user@gmail.com', 'user123');
+      final result = await auth.login('user@horizone.com', 'user123');
 
       expect(result, true);
       expect(auth.isLoggedIn, true);
-      expect(auth.userEmail, 'user@gmail.com');
+      expect(auth.userEmail, 'user@horizone.com');
       expect(auth.userName, 'Stock Manager');
       expect(auth.errorMessage, null);
     });
 
-    test('Case-insensitivity on email succeeds with user@gmail.com', () async {
+    test('Case-insensitivity on email succeeds with user@horizone.com', () async {
       final auth = AuthProvider();
-      final result = await auth.login('  USER@GMAIL.COM  ', 'user123');
+      final result = await auth.login('  USER@HORIZONE.COM  ', 'user123');
 
       expect(result, true);
       expect(auth.isLoggedIn, true);
-      expect(auth.userEmail, 'user@gmail.com');
+      expect(auth.userEmail, 'user@horizone.com');
     });
 
     test('Invalid credentials fail and return descriptive error', () async {
@@ -50,7 +50,7 @@ void main() {
 
     test('Logout clears session state', () async {
       final auth = AuthProvider();
-      await auth.login('user@gmail.com', 'user123');
+      await auth.login('user@horizone.com', 'user123');
       expect(auth.isLoggedIn, true);
 
       await auth.logout();
