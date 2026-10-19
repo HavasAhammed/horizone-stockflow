@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../models/customer.dart';
@@ -10,6 +11,7 @@ import '../../providers/dashboard_provider.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../utils/formatters.dart';
 import '../customer/add_customer_screen.dart';
+import 'sale_barcode_scanner_screen.dart';
 
 class AddSaleScreen extends StatefulWidget {
   const AddSaleScreen({super.key});
@@ -25,12 +27,17 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
   int _selectedWattage = 540;
   final _priceController = TextEditingController(text: '14500');
   final _notesController = TextEditingController();
+  final _scanController = TextEditingController();
+  final _scanFocusNode = FocusNode();
 
   DateTime _saleDate = DateTime.now();
   List<PanelItem> _availablePanels = [];
   final Set<String> _selectedSerials = {};
   bool _isLoadingPanels = false;
   bool _isSubmitting = false;
+
+  String _searchQuery = '';
+  String _filterTab = 'all'; // 'all', 'selected', 'unselected'
 
   @override
   void initState() {
@@ -59,6 +66,8 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
   void dispose() {
     _priceController.dispose();
     _notesController.dispose();
+    _scanController.dispose();
+    _scanFocusNode.dispose();
     super.dispose();
   }
 
@@ -77,6 +86,149 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
     } finally {
       setState(() => _isLoadingPanels = false);
     }
+  }
+
+  void _handleScanOrSubmit(String raw) {
+    final serial = raw.trim().toUpperCase();
+    if (serial.isEmpty) return;
+
+    // 1. Check if already selected
+    if (_selectedSerials.contains(serial)) {
+      HapticFeedback.selectionClick();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Panel "$serial" is already selected.'),
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      _scanController.clear();
+      _scanFocusNode.requestFocus();
+      return;
+    }
+
+    // 2. Check if in available panels for this wattage
+    final match = _availablePanels.cast<PanelItem?>().firstWhere(
+          (p) => p?.serialNumber.toUpperCase() == serial,
+          orElse: () => null,
+        );
+
+    if (match != null) {
+      HapticFeedback.mediumImpact();
+      SystemSound.play(SystemSoundType.click);
+      setState(() {
+        _selectedSerials.add(match.serialNumber);
+        _scanController.clear();
+        _searchQuery = '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '✓ Selected "${match.serialNumber}" (Batch: ${match.batchNumber}) • Total: ${_selectedSerials.length} panels'),
+          backgroundColor: AppColors.solarGreenDark,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      _scanFocusNode.requestFocus();
+      return;
+    }
+
+    // 3. Diagnose why it wasn't found from entire inventory
+    final allPanels = context.read<InventoryProvider>().allPanels;
+    final inAll = allPanels.cast<PanelItem?>().firstWhere(
+          (p) => p?.serialNumber.toUpperCase() == serial,
+          orElse: () => null,
+        );
+
+    HapticFeedback.heavyImpact();
+    SystemSound.play(SystemSoundType.alert);
+
+    if (inAll != null) {
+      if (inAll.wattage != _selectedWattage) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Wattage Mismatch: "$serial" is ${inAll.wattage}W (current sale is ${_selectedWattage}W).'),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (!inAll.isAvailable) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Unavailable: Panel "$serial" is already SOLD and cannot be dispatched.'),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Panel "$serial" is not available for selection.'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Serial "$serial" not found in inventory for ${_selectedWattage}W stock.'),
+          backgroundColor: AppColors.danger,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+    _scanController.clear();
+    _scanFocusNode.requestFocus();
+  }
+
+  Future<void> _openCameraScanner() async {
+    final allPanels = context.read<InventoryProvider>().allPanels;
+    final result = await Navigator.of(context).push<Set<String>>(
+      MaterialPageRoute(
+        builder: (ctx) => SaleBarcodeScannerScreen(
+          wattage: _selectedWattage,
+          availablePanels: _availablePanels,
+          initiallySelectedSerials: _selectedSerials,
+          allInventoryPanels: allPanels,
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        _selectedSerials.clear();
+        _selectedSerials.addAll(result);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${_selectedSerials.length} panels selected for sale.'),
+          backgroundColor: AppColors.solarGreenDark,
+        ),
+      );
+    }
+  }
+
+  List<PanelItem> get _filteredPanels {
+    var list = _availablePanels;
+    if (_filterTab == 'selected') {
+      list =
+          list.where((p) => _selectedSerials.contains(p.serialNumber)).toList();
+    } else if (_filterTab == 'unselected') {
+      list = list
+          .where((p) => !_selectedSerials.contains(p.serialNumber))
+          .toList();
+    }
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      list = list.where((p) {
+        return p.serialNumber.toLowerCase().contains(q) ||
+            p.batchNumber.toLowerCase().contains(q);
+      }).toList();
+    }
+    return list;
   }
 
   double get _unitPrice => double.tryParse(_priceController.text) ?? 0.0;
@@ -354,13 +506,19 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Available Panel Serials Multi-Select Chips
+            // Available Panel Serials Multi-Select Chips with Barcode Scanner
             Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: AppColors.border),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Header: Title and Select/Deselect All
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -373,34 +531,183 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
                           ),
                         ),
                         if (_availablePanels.isNotEmpty)
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                if (_selectedSerials.length ==
-                                    _availablePanels.length) {
-                                  _selectedSerials.clear();
-                                } else {
-                                  _selectedSerials.addAll(_availablePanels
-                                      .map((p) => p.serialNumber));
-                                }
-                              });
-                            },
-                            child: Text(
-                              _selectedSerials.length == _availablePanels.length
-                                  ? 'Deselect All'
-                                  : 'Select All',
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.primaryBlue),
-                            ),
+                          Row(
+                            children: [
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    if (_selectedSerials.length ==
+                                        _availablePanels.length) {
+                                      _selectedSerials.clear();
+                                    } else {
+                                      _selectedSerials.addAll(_availablePanels
+                                          .map((p) => p.serialNumber));
+                                    }
+                                  });
+                                },
+                                child: Text(
+                                  _selectedSerials.length ==
+                                          _availablePanels.length
+                                      ? 'Deselect All'
+                                      : 'Select All',
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.primaryBlue),
+                                ),
+                              ),
+                              if (_selectedSerials.isNotEmpty &&
+                                  _selectedSerials.length !=
+                                      _availablePanels.length) ...[
+                                const Text(' | ',
+                                    style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 12)),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedSerials.clear();
+                                    });
+                                  },
+                                  child: const Text(
+                                    'Clear',
+                                    style: TextStyle(
+                                        fontSize: 12, color: AppColors.danger),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+
+                    // Primary Action: Camera Barcode Scanner Button
+                    if (_availablePanels.isNotEmpty) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryBlue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: _openCameraScanner,
+                          icon: const Icon(Icons.qr_code_scanner, size: 20),
+                          label: Text(
+                            'Scan Panel Barcodes (${_selectedSerials.length}/${_availablePanels.length} Selected)',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Fast Hardware / Bluetooth Barcode Scanner & Search Input Field
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _scanController,
+                              focusNode: _scanFocusNode,
+                              textCapitalization: TextCapitalization.characters,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                hintText:
+                                    'Scan barcode or type serial (Press Enter)...',
+                                prefixIcon: const Icon(Icons.barcode_reader,
+                                    size: 20),
+                                suffixIcon: _scanController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(Icons.clear, size: 18),
+                                        onPressed: () {
+                                          setState(() {
+                                            _scanController.clear();
+                                            _searchQuery = '';
+                                          });
+                                        },
+                                      )
+                                    : null,
+                                isDense: true,
+                                border: const OutlineInputBorder(),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 10),
+                              ),
+                              onChanged: (val) {
+                                setState(() {
+                                  _searchQuery = val;
+                                });
+                              },
+                              onSubmitted: _handleScanOrSubmit,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.solarGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 11),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onPressed: _scanController.text.trim().isEmpty
+                                ? null
+                                : () => _handleScanOrSubmit(
+                                    _scanController.text),
+                            child: const Text('Select'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // Filter Pills for easily managing large stocks (e.g. 500+ panels)
+                      Row(
+                        children: [
+                          ChoiceChip(
+                            label: Text('All (${_availablePanels.length})'),
+                            selected: _filterTab == 'all',
+                            onSelected: (_) =>
+                                setState(() => _filterTab = 'all'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: Text('Selected (${_selectedSerials.length})'),
+                            selected: _filterTab == 'selected',
+                            selectedColor: AppColors.primaryBlueLight,
+                            onSelected: (_) =>
+                                setState(() => _filterTab = 'selected'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: Text(
+                                'Unselected (${_availablePanels.length - _selectedSerials.length})'),
+                            selected: _filterTab == 'unselected',
+                            onSelected: (_) =>
+                                setState(() => _filterTab = 'unselected'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
 
                     if (_isLoadingPanels)
                       const Center(
@@ -422,41 +729,70 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
                               fontSize: 12, color: Color(0xFF92400E)),
                         ),
                       )
+                    else if (_filteredPanels.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _searchQuery.isNotEmpty
+                              ? 'No panels match "$_searchQuery".'
+                              : _filterTab == 'selected'
+                                  ? 'No panels selected yet. Scan barcodes or tap below.'
+                                  : 'All available panels are currently selected.',
+                          style: const TextStyle(
+                              fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      )
                     else
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: _availablePanels.map((p) {
-                          final isSelected =
-                              _selectedSerials.contains(p.serialNumber);
-                          return FilterChip(
-                            label: Text(
-                              p.serialNumber,
-                              style: TextStyle(
-                                fontFamily: 'monospace',
-                                fontSize: 11,
-                                fontWeight: isSelected
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: isSelected
-                                    ? Colors.white
-                                    : AppColors.textMain,
-                              ),
-                            ),
-                            selected: isSelected,
-                            selectedColor: AppColors.primaryBlue,
-                            checkmarkColor: Colors.white,
-                            onSelected: (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedSerials.add(p.serialNumber);
-                                } else {
-                                  _selectedSerials.remove(p.serialNumber);
-                                }
-                              });
-                            },
-                          );
-                        }).toList(),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 240),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        padding: const EdgeInsets.all(8),
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: _filteredPanels.map((p) {
+                              final isSelected =
+                                  _selectedSerials.contains(p.serialNumber);
+                              return FilterChip(
+                                label: Text(
+                                  p.serialNumber,
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 11,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppColors.textMain,
+                                  ),
+                                ),
+                                selected: isSelected,
+                                selectedColor: AppColors.primaryBlue,
+                                checkmarkColor: Colors.white,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedSerials.add(p.serialNumber);
+                                    } else {
+                                      _selectedSerials.remove(p.serialNumber);
+                                    }
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ),
                       ),
 
                     const Divider(height: 20),

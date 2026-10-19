@@ -9,11 +9,15 @@ import {
   CheckCircle2,
   Check,
   UserCheck,
+  Scan,
+  Barcode,
+  ShoppingCart,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import type { SaleTransaction, Customer, PanelItem, StockByWattage } from '../types';
 import { Modal } from '../components/Modal';
 import { Badge } from '../components/Badge';
+import { SaleBarcodeScannerModal } from '../components/SaleBarcodeScannerModal';
 
 export const SalesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,7 +39,14 @@ export const SalesPage: React.FC = () => {
 
   // Available panels for selected wattage
   const [availablePanels, setAvailablePanels] = useState<PanelItem[]>([]);
+  const [allPanels, setAllPanels] = useState<PanelItem[]>([]);
   const [loadingPanels, setLoadingPanels] = useState(false);
+
+  // Barcode scanner & search states for sales
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [panelSearchQuery, setPanelSearchQuery] = useState('');
+  const [panelFilterTab, setPanelFilterTab] = useState<'all' | 'selected' | 'unselected'>('all');
+  const [scanInputValue, setScanInputValue] = useState('');
 
   // Add form fields
   const [formData, setFormData] = useState({
@@ -75,17 +86,19 @@ export const SalesPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const [salesData, custData, stockData] = await Promise.all([
+      const [salesData, custData, stockData, invData] = await Promise.all([
         apiService.getSales({
           search,
           wattage: wattageFilter ? Number(wattageFilter) : undefined,
         }),
         apiService.getCustomers(),
         apiService.getStockByWattage(),
+        apiService.getInventory(),
       ]);
       setSales(salesData);
       setCustomers(custData);
       setStockByWattage(stockData);
+      setAllPanels(invData);
       if (custData.length > 0 && !formData.customerId) {
         setFormData((prev) => ({ ...prev, customerId: custData[0].id }));
       }
@@ -142,6 +155,63 @@ export const SalesPage: React.FC = () => {
         return { ...prev, selectedSerials: [...prev.selectedSerials, sn] };
       }
     });
+  };
+
+  const filteredAvailablePanels = useMemo(() => {
+    let list = availablePanels;
+    if (panelFilterTab === 'selected') {
+      list = list.filter((p) => formData.selectedSerials.includes(p.serialNumber));
+    } else if (panelFilterTab === 'unselected') {
+      list = list.filter((p) => !formData.selectedSerials.includes(p.serialNumber));
+    }
+    if (panelSearchQuery.trim()) {
+      const q = panelSearchQuery.trim().toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.serialNumber.toLowerCase().includes(q) ||
+          p.batchNumber.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [availablePanels, formData.selectedSerials, panelFilterTab, panelSearchQuery]);
+
+  const handleScanOrSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const serial = scanInputValue.trim().toUpperCase();
+    if (!serial) return;
+
+    if (formData.selectedSerials.includes(serial)) {
+      setError(`Panel "${serial}" is already selected.`);
+      setScanInputValue('');
+      return;
+    }
+
+    const match = availablePanels.find((p) => p.serialNumber.toUpperCase() === serial);
+    if (match) {
+      toggleSerialSelection(match.serialNumber);
+      setError(null);
+      setSuccessMsg(`✓ Selected panel "${match.serialNumber}" (Batch: ${match.batchNumber})`);
+      setScanInputValue('');
+      setPanelSearchQuery('');
+      return;
+    }
+
+    // Diagnose why it wasn't matched
+    const inAll = allPanels.find((p) => p.serialNumber.toUpperCase() === serial);
+    if (inAll) {
+      if (inAll.wattage !== Number(formData.panelWattage)) {
+        setError(
+          `Wattage Mismatch: "${serial}" is ${inAll.wattage}W (current selection is ${formData.panelWattage}W).`
+        );
+      } else if (inAll.status === 'sold') {
+        setError(`Panel "${serial}" is already SOLD and cannot be dispatched.`);
+      } else {
+        setError(`Panel "${serial}" is not available for selection.`);
+      }
+    } else {
+      setError(`Serial "${serial}" not found in inventory for ${formData.panelWattage}W stock.`);
+    }
+    setScanInputValue('');
   };
 
   const selectAllAvailable = () => {
@@ -223,6 +293,16 @@ export const SalesPage: React.FC = () => {
     }).format(amt);
   };
 
+  const { totalSoldPanels, totalSalesRevenue } = useMemo(() => {
+    return sales.reduce(
+      (acc, s) => ({
+        totalSoldPanels: acc.totalSoldPanels + (s.quantity || 0),
+        totalSalesRevenue: acc.totalSalesRevenue + (s.totalSellingAmount || 0),
+      }),
+      { totalSoldPanels: 0, totalSalesRevenue: 0 }
+    );
+  }, [sales]);
+
   return (
     <div>
       {/* Messages */}
@@ -238,6 +318,79 @@ export const SalesPage: React.FC = () => {
           <div>{successMsg}</div>
         </div>
       )}
+
+      {/* Top Total Sales Revenue Summary Card */}
+      <div
+        className="card"
+        style={{
+          marginBottom: '20px',
+          background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+          borderColor: '#bfdbfe',
+        }}
+      >
+        <div
+          className="card-body"
+          style={{
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(37, 99, 235, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#2563eb',
+              }}
+            >
+              <ShoppingCart size={26} />
+            </div>
+            <div>
+              <div
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  color: '#1e40af',
+                  marginBottom: '2px',
+                }}
+              >
+                Total Sales Revenue
+              </div>
+              <div
+                style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 800,
+                  color: '#1e293b',
+                  lineHeight: 1.2,
+                }}
+              >
+                {formatCurrency(totalSalesRevenue)}
+              </div>
+              <div
+                style={{
+                  fontSize: '0.85rem',
+                  color: '#1d4ed8',
+                  fontWeight: 600,
+                  marginTop: '2px',
+                }}
+              >
+                {totalSoldPanels} Panels &bull; {sales.length} Orders
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Action & Filter Bar */}
       <div className="card" style={{ marginBottom: '20px' }}>
@@ -472,18 +625,36 @@ export const SalesPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Available Serial Numbers Selector */}
-          <div className="form-group">
+          {/* Available Serial Numbers Selector with Barcode Scanner & Search */}
+          <div
+            className="form-group"
+            style={{
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              padding: '14px',
+              backgroundColor: '#f8fafc',
+            }}
+          >
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: '8px',
+                marginBottom: '10px',
               }}
             >
-              <label className="form-label" style={{ margin: 0 }}>
-                Select Available Physical Panels ({availablePanels.length} available) *
+              <label
+                className="form-label"
+                style={{
+                  margin: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 600,
+                }}
+              >
+                <Barcode size={18} color="var(--color-primary)" />
+                Select Physical Panels ({availablePanels.length} available) *
               </label>
               <div style={{ display: 'flex', gap: '8px', fontSize: '0.8rem' }}>
                 <button
@@ -515,6 +686,88 @@ export const SalesPage: React.FC = () => {
               </div>
             </div>
 
+            {availablePanels.length > 0 && (
+              <>
+                {/* Camera Scanner Button */}
+                <div style={{ marginBottom: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                    }}
+                    onClick={() => setIsScannerModalOpen(true)}
+                  >
+                    <Scan size={18} />
+                    Scan Panel Barcodes ({formData.selectedSerials.length} of {availablePanels.length} Selected)
+                  </button>
+                </div>
+
+                {/* Fast Hardware Barcode Scanner & Search Input Field */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Scan panel barcode or search serial (Press Enter to select)..."
+                      style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                      value={scanInputValue}
+                      onChange={(e) => {
+                        setScanInputValue(e.target.value.toUpperCase());
+                        setPanelSearchQuery(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleScanOrSubmit();
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ whiteSpace: 'nowrap' }}
+                    onClick={() => handleScanOrSubmit()}
+                  >
+                    <Plus size={16} /> Select
+                  </button>
+                </div>
+
+                {/* Filter Pills for 500+ panels */}
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                  <button
+                    type="button"
+                    className={`badge ${panelFilterTab === 'all' ? 'badge-primary' : 'badge-gray'}`}
+                    style={{ cursor: 'pointer', border: 'none', padding: '4px 10px' }}
+                    onClick={() => setPanelFilterTab('all')}
+                  >
+                    All ({availablePanels.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`badge ${panelFilterTab === 'selected' ? 'badge-green' : 'badge-gray'}`}
+                    style={{ cursor: 'pointer', border: 'none', padding: '4px 10px' }}
+                    onClick={() => setPanelFilterTab('selected')}
+                  >
+                    Selected ({formData.selectedSerials.length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`badge ${panelFilterTab === 'unselected' ? 'badge-orange' : 'badge-gray'}`}
+                    style={{ cursor: 'pointer', border: 'none', padding: '4px 10px' }}
+                    onClick={() => setPanelFilterTab('unselected')}
+                  >
+                    Unselected ({availablePanels.length - formData.selectedSerials.length})
+                  </button>
+                </div>
+              </>
+            )}
+
             {loadingPanels ? (
               <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>
                 Loading available panels...
@@ -532,9 +785,37 @@ export const SalesPage: React.FC = () => {
                 No available panels in stock for {formData.panelWattage}W. Please record an inward
                 purchase first.
               </div>
+            ) : filteredAvailablePanels.length === 0 ? (
+              <div
+                style={{
+                  padding: '16px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.85rem',
+                  backgroundColor: '#fff',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                {panelSearchQuery
+                  ? `No panels match "${panelSearchQuery}".`
+                  : panelFilterTab === 'selected'
+                  ? 'No panels selected yet. Scan barcodes or select below.'
+                  : 'All available panels are currently selected.'}
+              </div>
             ) : (
-              <div className="serial-chips-grid">
-                {availablePanels.map((p) => {
+              <div
+                className="serial-chips-grid"
+                style={{
+                  maxHeight: '240px',
+                  overflowY: 'auto',
+                  padding: '8px',
+                  backgroundColor: '#fff',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                {filteredAvailablePanels.map((p) => {
                   const isSelected = formData.selectedSerials.includes(p.serialNumber);
                   return (
                     <div
@@ -555,7 +836,7 @@ export const SalesPage: React.FC = () => {
                 justifyContent: 'space-between',
                 marginTop: '10px',
                 fontSize: '0.9rem',
-                backgroundColor: '#f8fafc',
+                backgroundColor: '#fff',
                 padding: '10px 14px',
                 borderRadius: '6px',
                 border: '1px solid var(--border-color)',
@@ -602,6 +883,17 @@ export const SalesPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Sale Camera Barcode Scanner Modal */}
+      <SaleBarcodeScannerModal
+        isOpen={isScannerModalOpen}
+        onClose={() => setIsScannerModalOpen(false)}
+        wattage={Number(formData.panelWattage)}
+        availablePanels={availablePanels}
+        selectedSerials={formData.selectedSerials}
+        onToggleSerial={toggleSerialSelection}
+        onClearAll={clearSelection}
+      />
 
       {/* Confirmation Dialog Before Committing Sale */}
       {isConfirmModalOpen && (

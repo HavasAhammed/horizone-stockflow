@@ -17,9 +17,13 @@ class DashboardProvider extends ChangeNotifier {
   int get totalAvailable => (_metrics?['totalAvailable'] as int?) ?? 0;
   int get totalPurchased => (_metrics?['totalPurchased'] as int?) ?? 0;
   int get totalSold => (_metrics?['totalSold'] as int?) ?? 0;
+  double get totalPurchaseAmount =>
+      (_metrics?['totalPurchaseAmount'] as double?) ?? 0.0;
+  double get totalSalesAmount =>
+      (_metrics?['totalSalesAmount'] as double?) ?? 0.0;
   double get totalStockValue => (_metrics?['totalStockValue'] as double?) ?? 0.0;
-  Map<int, Map<String, int>> get byWattage =>
-      (_metrics?['byWattage'] as Map<int, Map<String, int>>?) ?? {};
+  Map<int, Map<String, dynamic>> get byWattage =>
+      (_metrics?['byWattage'] as Map<int, Map<String, dynamic>>?) ?? {};
   List<Map<String, dynamic>> get lowStockAlerts =>
       (_metrics?['lowStockAlerts'] as List<Map<String, dynamic>>?) ?? [];
 

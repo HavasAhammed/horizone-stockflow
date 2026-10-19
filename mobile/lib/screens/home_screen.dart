@@ -61,10 +61,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                       icon: const Icon(Icons.add_shopping_cart, size: 16),
-                      label: const Text('Record Sale', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Record Sale',
+                        style: TextStyle(fontSize: 12),
+                      ),
                       onPressed: () async {
                         final res = await Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AddSaleScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const AddSaleScreen(),
+                          ),
                         );
                         if (res == true) _refreshAll();
                       },
@@ -78,10 +83,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                       icon: const Icon(Icons.add_box, size: 16),
-                      label: const Text('Add Purchase', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Add Purchase',
+                        style: TextStyle(fontSize: 12),
+                      ),
                       onPressed: () async {
                         final res = await Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AddPurchaseScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const AddPurchaseScreen(),
+                          ),
                         );
                         if (res == true) _refreshAll();
                       },
@@ -94,10 +104,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                       icon: const Icon(Icons.person_add, size: 16),
-                      label: const Text('Add Customer', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Add Customer',
+                        style: TextStyle(fontSize: 12),
+                      ),
                       onPressed: () async {
                         final res = await Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AddCustomerScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const AddCustomerScreen(),
+                          ),
                         );
                         if (res == true) _refreshAll();
                       },
@@ -118,8 +133,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.warning_amber_rounded,
-                          color: AppColors.solarAmber, size: 24),
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: AppColors.solarAmber,
+                        size: 24,
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -142,19 +160,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Expanded(
                     child: StatCard(
-                      label: 'Available Stock',
-                      value: '${provider.totalAvailable} Panels',
-                      subtext: 'In warehouse',
-                      icon: Icons.check_circle_outline,
-                      iconColor: AppColors.solarGreenDark,
-                      iconBg: AppColors.solarGreenLight,
+                      label: 'Total Panels Sold',
+                      value: '${provider.totalSold} Panels',
+                      amount: Formatters.formatCurrency(
+                        provider.totalSalesAmount,
+                      ),
+                      subtext: 'Customer dispatches',
+                      icon: Icons.shopping_cart_outlined,
+                      iconColor: AppColors.primaryBlue,
+                      iconBg: AppColors.primaryBlueLight,
                     ),
                   ),
+
                   const SizedBox(width: 12),
                   Expanded(
                     child: StatCard(
                       label: 'Total Purchased',
                       value: '${provider.totalPurchased} Panels',
+                      amount: Formatters.formatCurrency(
+                        provider.totalPurchaseAmount,
+                      ),
                       subtext: 'Inward inventory',
                       icon: Icons.inventory_2_outlined,
                       iconColor: AppColors.solarAmber,
@@ -168,19 +193,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Expanded(
                     child: StatCard(
-                      label: 'Total Panels Sold',
-                      value: '${provider.totalSold} Panels',
-                      subtext: 'Customer dispatches',
-                      icon: Icons.shopping_cart_outlined,
-                      iconColor: AppColors.primaryBlue,
-                      iconBg: AppColors.primaryBlueLight,
+                      label: 'Available Stock',
+                      value: '${provider.totalAvailable} Panels',
+                      subtext: 'In warehouse',
+                      icon: Icons.check_circle_outline,
+                      iconColor: AppColors.solarGreenDark,
+                      iconBg: AppColors.solarGreenLight,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: StatCard(
                       label: 'Stock Valuation',
-                      value: Formatters.formatCurrency(provider.totalStockValue),
+                      value: Formatters.formatCurrency(
+                        provider.totalStockValue,
+                      ),
                       subtext: 'Cost basis of stock',
                       icon: Icons.currency_rupee,
                       iconColor: AppColors.solarGreenDark,
@@ -210,13 +237,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (byWattage.isEmpty)
                         const Text(
                           'No panel inventory recorded yet.',
-                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
                         )
                       else
                         ...byWattage.entries.map((entry) {
                           final wattage = entry.key;
                           final counts = entry.value;
-                          final isLow = counts['available']! <= 10;
+                          final availableCount =
+                              (counts['available'] as int?) ?? 0;
+                          final soldCount = (counts['sold'] as int?) ?? 0;
+                          final totalCount = (counts['total'] as int?) ?? 0;
+                          final availableAmount =
+                              (counts['availableAmount'] as num?)?.toDouble() ??
+                                  0.0;
+                          final isLow = availableCount <= 10;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Row(
@@ -224,7 +261,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Container(
                                   width: 65,
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 4, horizontal: 6),
+                                    vertical: 4,
+                                    horizontal: 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppColors.primaryBlueLight,
                                     borderRadius: BorderRadius.circular(6),
@@ -242,20 +281,55 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        'Available: ${counts['available']} pcs',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: isLow
-                                              ? AppColors.solarAmber
-                                              : AppColors.solarGreenDark,
-                                        ),
+                                      Wrap(
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        spacing: 6,
+                                        runSpacing: 2,
+                                        children: [
+                                          Text(
+                                            'Available: $availableCount pcs',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: isLow
+                                                  ? AppColors.solarAmber
+                                                  : AppColors.solarGreenDark,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 1.5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: isLow
+                                                  ? AppColors.solarAmberLight
+                                                  : AppColors.solarGreenLight,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              Formatters.formatCurrency(
+                                                availableAmount,
+                                              ),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                                color: isLow
+                                                    ? const Color(0xFFB45309)
+                                                    : AppColors.solarGreenDark,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
+                                      const SizedBox(height: 2),
                                       Text(
-                                        'Sold: ${counts['sold']} pcs | Total inward: ${counts['total']} pcs',
+                                        'Sold: $soldCount pcs | Total inward: $totalCount pcs',
                                         style: const TextStyle(
                                           fontSize: 11,
                                           color: AppColors.textSecondary,
@@ -300,30 +374,44 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       if (recentPurchases.isEmpty)
-                        const Text('No recent purchases',
-                            style: TextStyle(
-                                fontSize: 13, color: AppColors.textSecondary))
+                        const Text(
+                          'No recent purchases',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        )
                       else
-                        ...recentPurchases.map((p) => Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: const Icon(Icons.arrow_downward,
-                                    color: AppColors.solarAmber),
-                                title: Text('${p.batchNumber} (${p.wattage}W)',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14)),
-                                subtitle: Text(
-                                    '${Formatters.formatDate(p.purchaseDate)} • ${p.quantity} panels'),
-                                trailing: Text(
-                                  Formatters.formatCurrency(
-                                      p.totalPurchaseAmount),
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13),
+                        ...recentPurchases.map(
+                          (p) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.arrow_downward,
+                                color: AppColors.solarAmber,
+                              ),
+                              title: Text(
+                                '${p.batchNumber} (${p.wattage}W)',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
                                 ),
                               ),
-                            )),
+                              subtitle: Text(
+                                '${Formatters.formatDate(p.purchaseDate)} • ${p.quantity} panels',
+                              ),
+                              trailing: Text(
+                                Formatters.formatCurrency(
+                                  p.totalPurchaseAmount,
+                                ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 16),
 
                       // Recent Sales
@@ -337,31 +425,43 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       if (recentSales.isEmpty)
-                        const Text('No recent sales',
-                            style: TextStyle(
-                                fontSize: 13, color: AppColors.textSecondary))
+                        const Text(
+                          'No recent sales',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        )
                       else
-                        ...recentSales.map((s) => Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: const Icon(Icons.arrow_upward,
-                                    color: AppColors.solarGreenDark),
-                                title: Text(
-                                    '${s.customerName ?? 'Customer'} (${s.panelWattage}W)',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14)),
-                                subtitle: Text(
-                                    'KSEB: ${s.consumerNumber} • ${s.quantity} panels'),
-                                trailing: Text(
-                                  Formatters.formatCurrency(s.totalSellingAmount),
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.solarGreenDark,
-                                      fontSize: 13),
+                        ...recentSales.map(
+                          (s) => Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: const Icon(
+                                Icons.arrow_upward,
+                                color: AppColors.solarGreenDark,
+                              ),
+                              title: Text(
+                                '${s.customerName ?? 'Customer'} (${s.panelWattage}W)',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
                                 ),
                               ),
-                            )),
+                              subtitle: Text(
+                                'KSEB: ${s.consumerNumber} • ${s.quantity} panels',
+                              ),
+                              trailing: Text(
+                                Formatters.formatCurrency(s.totalSellingAmount),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.solarGreenDark,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   );
                 },

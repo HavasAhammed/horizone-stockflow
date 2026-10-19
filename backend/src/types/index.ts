@@ -59,6 +59,7 @@ export interface StockByWattage {
   availableCount: number;
   soldCount: number;
   totalCount: number;
+  availableAmount: number;
   lowStockAlert: boolean;
 }
 
@@ -74,6 +75,8 @@ export interface DashboardSummary {
   totalAvailablePanels: number;
   totalPurchasedPanels: number;
   totalSoldPanels: number;
+  totalPurchaseAmount: number;
+  totalSalesAmount: number;
   totalStockValue: number; // sum of unitPurchasePrice of all available panels
   lowStockWarnings: Array<{ wattage: number; availableCount: number; threshold: number }>;
   stockByWattage: StockByWattage[];

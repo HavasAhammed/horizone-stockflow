@@ -8,11 +8,18 @@ import {
   Eye,
   AlertCircle,
   CheckCircle2,
+  Scan,
+  Barcode,
+  ClipboardPaste,
+  Check,
+  X,
+  PackagePlus,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import type { PurchaseTransaction } from '../types';
 import { Modal } from '../components/Modal';
 import { Badge } from '../components/Badge';
+import { WebBarcodeScannerModal } from '../components/WebBarcodeScannerModal';
 
 export const PurchasesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,6 +42,16 @@ export const PurchasesPage: React.FC = () => {
   const [editPurchase, setEditPurchase] = useState<PurchaseTransaction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Barcode scanner & individual serials state
+  const [serials, setSerials] = useState<string[]>([]);
+  const [singleSerialInput, setSingleSerialInput] = useState('');
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [isBulkPasteOpen, setIsBulkPasteOpen] = useState(false);
+  const [bulkPasteText, setBulkPasteText] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [existingInventorySerials, setExistingInventorySerials] = useState<Set<string>>(new Set());
+
   // Add form fields
   const [formData, setFormData] = useState({
     purchaseDate: new Date().toISOString().split('T')[0],
@@ -43,7 +60,6 @@ export const PurchasesPage: React.FC = () => {
     wattage: 540,
     quantity: 1,
     unitPurchasePrice: 11500,
-    serialsText: '',
     notes: '',
   });
 
@@ -63,8 +79,18 @@ export const PurchasesPage: React.FC = () => {
     }
   };
 
+  const loadInventorySerials = async () => {
+    try {
+      const inventory = await apiService.getInventory();
+      setExistingInventorySerials(new Set(inventory.map((p) => p.serialNumber.toUpperCase())));
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     loadPurchases();
+    loadInventorySerials();
     if (searchParams.get('action') === 'new') {
       setIsAddModalOpen(true);
       setSearchParams({});
@@ -76,30 +102,140 @@ export const PurchasesPage: React.FC = () => {
     loadPurchases();
   };
 
-  // Helper to parse serials from text area
-  const parsedSerials = formData.serialsText
-    .split(/[\n,\s]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  // Find duplicates in entry
+  const duplicateSerialsInEntry = useMemo(() => {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    serials.forEach((s) => {
+      const u = s.toUpperCase();
+      if (seen.has(u)) dupes.add(u);
+      else seen.add(u);
+    });
+    return Array.from(dupes);
+  }, [serials]);
 
-  const duplicateSerialsInInput = parsedSerials.filter(
-    (item, index) => parsedSerials.indexOf(item) !== index
-  );
+  // Find conflicts with existing inventory
+  const conflictsWithInventory = useMemo(() => {
+    return serials
+      .filter((s) => existingInventorySerials.has(s.toUpperCase()))
+      .map((s) => s.toUpperCase());
+  }, [serials, existingInventorySerials]);
+
+  const handleAddSingleSerial = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const val = singleSerialInput.trim().toUpperCase();
+    if (!val) return;
+
+    if (serials.some((s) => s.toUpperCase() === val)) {
+      setError(`Duplicate serial: "${val}" is already added to this batch.`);
+      return;
+    }
+
+    if (existingInventorySerials.has(val)) {
+      setError(`Conflict: "${val}" already exists in inventory.`);
+      return;
+    }
+
+    setError(null);
+    const updated = [...serials, val];
+    setSerials(updated);
+    setSingleSerialInput('');
+
+    // If added serials exceed quantity, auto-update quantity
+    if (updated.length > Number(formData.quantity)) {
+      setFormData((prev) => ({ ...prev, quantity: updated.length }));
+    }
+  };
+
+  const handleSaveEditSerial = (index: number) => {
+    const val = editingValue.trim().toUpperCase();
+    if (!val) return;
+
+    const isDuplicate = serials.some((s, idx) => idx !== index && s.toUpperCase() === val);
+    if (isDuplicate) {
+      setError(`Serial "${val}" already exists in this batch.`);
+      return;
+    }
+
+    if (existingInventorySerials.has(val)) {
+      setError(`Serial "${val}" already exists in inventory.`);
+      return;
+    }
+
+    setError(null);
+    const updated = [...serials];
+    updated[index] = val;
+    setSerials(updated);
+    setEditingIndex(null);
+    setEditingValue('');
+  };
+
+  const handleRemoveSerial = (index: number) => {
+    setSerials((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleApplyBulkPaste = () => {
+    const tokens = bulkPasteText
+      .split(/[\n,\s]+/)
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0);
+
+    if (tokens.length === 0) return;
+
+    const added: string[] = [];
+    const dupes: string[] = [];
+    const conflicts: string[] = [];
+    const currentSet = new Set(serials.map((s) => s.toUpperCase()));
+
+    for (const t of tokens) {
+      if (currentSet.has(t)) {
+        dupes.push(t);
+      } else if (existingInventorySerials.has(t)) {
+        conflicts.push(t);
+      } else {
+        currentSet.add(t);
+        added.push(t);
+      }
+    }
+
+    const updated = [...serials, ...added];
+    setSerials(updated);
+    setBulkPasteText('');
+    setIsBulkPasteOpen(false);
+
+    if (updated.length > Number(formData.quantity)) {
+      setFormData((prev) => ({ ...prev, quantity: updated.length }));
+    }
+
+    if (dupes.length > 0 || conflicts.length > 0) {
+      setError(
+        `Added ${added.length} serials. Skipped ${dupes.length} duplicates and ${conflicts.length} inventory conflicts.`
+      );
+    } else {
+      setError(null);
+      setSuccessMsg(`Added ${added.length} serial numbers.`);
+    }
+  };
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
 
-    if (parsedSerials.length !== Number(formData.quantity)) {
+    if (serials.length !== Number(formData.quantity)) {
       setError(
-        `Quantity (${formData.quantity}) does not match entered serial numbers (${parsedSerials.length}).`
+        `Purchase quantity is ${formData.quantity}, but you have entered ${serials.length} serial numbers. Please match the count.`
       );
       return;
     }
 
-    if (duplicateSerialsInInput.length > 0) {
-      setError(`Duplicate serials found in entry: ${duplicateSerialsInInput.join(', ')}`);
+    if (duplicateSerialsInEntry.length > 0) {
+      setError(`Duplicate serials found in entry: ${duplicateSerialsInEntry.join(', ')}`);
+      return;
+    }
+
+    if (conflictsWithInventory.length > 0) {
+      setError(`Serials already exist in inventory: ${conflictsWithInventory.join(', ')}`);
       return;
     }
 
@@ -110,7 +246,7 @@ export const PurchasesPage: React.FC = () => {
         batchNumber: formData.batchNumber.trim(),
         wattage: Number(formData.wattage),
         quantity: Number(formData.quantity),
-        serialNumbers: parsedSerials,
+        serialNumbers: serials,
         unitPurchasePrice: Number(formData.unitPurchasePrice),
         notes: formData.notes.trim() || undefined,
       });
@@ -124,10 +260,12 @@ export const PurchasesPage: React.FC = () => {
         wattage: 540,
         quantity: 1,
         unitPurchasePrice: 11500,
-        serialsText: '',
         notes: '',
       });
+      setSerials([]);
+      setSingleSerialInput('');
       loadPurchases();
+      loadInventorySerials();
     } catch (err: any) {
       setError(err.message || 'Failed to register purchase');
     }
@@ -172,6 +310,16 @@ export const PurchasesPage: React.FC = () => {
     }).format(amt);
   };
 
+  const { totalPurchasePanels, totalPurchaseExpenditure } = useMemo(() => {
+    return purchases.reduce(
+      (acc, p) => ({
+        totalPurchasePanels: acc.totalPurchasePanels + (p.quantity || 0),
+        totalPurchaseExpenditure: acc.totalPurchaseExpenditure + (p.totalPurchaseAmount || 0),
+      }),
+      { totalPurchasePanels: 0, totalPurchaseExpenditure: 0 }
+    );
+  }, [purchases]);
+
   return (
     <div>
       {/* Messages */}
@@ -187,6 +335,79 @@ export const PurchasesPage: React.FC = () => {
           <div>{successMsg}</div>
         </div>
       )}
+
+      {/* Top Total Purchases Summary Card */}
+      <div
+        className="card"
+        style={{
+          marginBottom: '20px',
+          background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+          borderColor: '#fde68a',
+        }}
+      >
+        <div
+          className="card-body"
+          style={{
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '10px',
+                backgroundColor: 'rgba(217, 119, 6, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#d97706',
+              }}
+            >
+              <PackagePlus size={26} />
+            </div>
+            <div>
+              <div
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  color: '#92400e',
+                  marginBottom: '2px',
+                }}
+              >
+                Total Inward Purchases
+              </div>
+              <div
+                style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 800,
+                  color: '#1e293b',
+                  lineHeight: 1.2,
+                }}
+              >
+                {formatCurrency(totalPurchaseExpenditure)}
+              </div>
+              <div
+                style={{
+                  fontSize: '0.85rem',
+                  color: '#b45309',
+                  fontWeight: 600,
+                  marginTop: '2px',
+                }}
+              >
+                {totalPurchasePanels} Panels &bull; {purchases.length} Batches
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Action Header & Search */}
       <div className="card" style={{ marginBottom: '20px' }}>
@@ -411,46 +632,414 @@ export const PurchasesPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="form-group">
+          {/* Barcode Scanner & Serial Numbers Suite */}
+          <div
+            className="form-group"
+            style={{
+              border: '1px solid var(--color-border)',
+              borderRadius: '8px',
+              padding: '14px',
+              background: 'var(--color-bg)',
+            }}
+          >
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                marginBottom: '6px',
+                alignItems: 'center',
+                marginBottom: '10px',
               }}
             >
-              <label className="form-label" style={{ margin: 0 }}>
-                Individual Panel Serial Numbers *
+              <label
+                className="form-label"
+                style={{
+                  margin: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 600,
+                }}
+              >
+                <Barcode size={18} color="var(--color-primary)" />
+                Panel Serial Numbers *
               </label>
               <span
                 style={{
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  backgroundColor:
+                    serials.length === Number(formData.quantity)
+                      ? 'var(--color-green-light)'
+                      : 'var(--color-danger-light)',
                   color:
-                    parsedSerials.length === Number(formData.quantity)
+                    serials.length === Number(formData.quantity)
                       ? 'var(--color-green-dark)'
                       : 'var(--color-danger)',
                 }}
               >
-                {parsedSerials.length} of {formData.quantity} serials entered
+                {serials.length} of {formData.quantity} serials entered
               </span>
             </div>
-            <textarea
-              required
-              rows={5}
-              placeholder="Paste panel serial numbers separated by comma, space or new line (e.g. HZ-540-001, HZ-540-002)..."
-              className="form-textarea"
-              style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
-              value={formData.serialsText}
-              onChange={(e) => setFormData({ ...formData, serialsText: e.target.value })}
-            />
-            {duplicateSerialsInInput.length > 0 && (
-              <div style={{ color: 'var(--color-danger)', fontSize: '0.8rem', marginTop: '4px' }}>
-                Duplicate serials in input: {duplicateSerialsInInput.join(', ')}
+
+            {/* Action Buttons: Camera Scanner & Bulk Paste */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                }}
+                onClick={() => setIsScannerModalOpen(true)}
+              >
+                <Scan size={18} />
+                Scan with Camera
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+                onClick={() => setIsBulkPasteOpen(!isBulkPasteOpen)}
+              >
+                <ClipboardPaste size={16} />
+                {isBulkPasteOpen ? 'Close Paste' : 'Bulk Paste'}
+              </button>
+            </div>
+
+            {/* Bulk Paste Box */}
+            {isBulkPasteOpen && (
+              <div
+                style={{
+                  background: '#fff',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  padding: '10px',
+                  marginBottom: '10px',
+                }}
+              >
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>
+                  Paste serial numbers separated by comma, space or newline:
+                </label>
+                <textarea
+                  rows={3}
+                  className="form-textarea"
+                  placeholder="HZ-540-001, HZ-540-002, HZ-540-003..."
+                  style={{ fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '8px' }}
+                  value={bulkPasteText}
+                  onChange={(e) => setBulkPasteText(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ width: '100%', fontSize: '0.85rem' }}
+                  onClick={handleApplyBulkPaste}
+                >
+                  Parse & Add Serials
+                </button>
               </div>
             )}
-            <div className="form-hint">
-              Bulk paste supported. Every single panel is tracked in inventory with its serial.
+
+            {/* Hardware Scanner & Quick Input Field */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Scan with handheld barcode scanner or type serial..."
+                  style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                  value={singleSerialInput}
+                  onChange={(e) => setSingleSerialInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSingleSerial();
+                    }
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => handleAddSingleSerial()}
+              >
+                <Plus size={16} /> Add
+              </button>
+            </div>
+
+            {/* Warnings: In-batch Duplicates */}
+            {duplicateSerialsInEntry.length > 0 && (
+              <div
+                className="alert-banner alert-danger"
+                style={{ margin: '0 0 10px 0', padding: '8px 12px', fontSize: '0.8rem' }}
+              >
+                <AlertCircle size={16} />
+                <div style={{ flex: 1 }}>
+                  Duplicate serials detected: {duplicateSerialsInEntry.join(', ')}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                  onClick={() => {
+                    const unique = Array.from(new Set(serials.map((s) => s.toUpperCase())));
+                    setSerials(unique);
+                  }}
+                >
+                  Deduplicate
+                </button>
+              </div>
+            )}
+
+            {/* Warnings: Inventory Conflicts */}
+            {conflictsWithInventory.length > 0 && (
+              <div
+                className="alert-banner alert-danger"
+                style={{ margin: '0 0 10px 0', padding: '8px 12px', fontSize: '0.8rem' }}
+              >
+                <AlertCircle size={16} />
+                <div>Already exists in inventory: {conflictsWithInventory.join(', ')}</div>
+              </div>
+            )}
+
+            {/* Quantity Mismatch Sync Hint */}
+            {serials.length !== Number(formData.quantity) && serials.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'var(--color-bg)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  padding: '6px 10px',
+                  fontSize: '0.8rem',
+                  marginBottom: '10px',
+                }}
+              >
+                <span>
+                  {serials.length < Number(formData.quantity)
+                    ? `Need ${Number(formData.quantity) - serials.length} more serial(s).`
+                    : `${serials.length} serials entered for quantity ${formData.quantity}.`}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                  onClick={() =>
+                    setFormData((prev) => ({ ...prev, quantity: serials.length }))
+                  }
+                >
+                  Set Quantity to {serials.length}
+                </button>
+              </div>
+            )}
+
+            {/* Serials List */}
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '6px',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  Scanned / Entered Panels ({serials.length})
+                </span>
+                {serials.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSerials([])}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-danger)',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+
+              <div
+                style={{
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  background: '#fff',
+                }}
+              >
+                {serials.length === 0 ? (
+                  <div
+                    style={{
+                      textAlign: 'center',
+                      padding: '20px',
+                      color: 'var(--color-text-muted)',
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    No panels scanned or entered yet. Scan with camera, type above, or use a handheld barcode scanner.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {serials.map((sn, idx) => {
+                      const isConflict = existingInventorySerials.has(sn.toUpperCase());
+                      const isDuplicate =
+                        serials.filter((s) => s.toUpperCase() === sn.toUpperCase()).length > 1;
+
+                      return (
+                        <div
+                          key={`${sn}-${idx}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 10px',
+                            borderBottom:
+                              idx < serials.length - 1 ? '1px solid var(--color-border)' : 'none',
+                            background:
+                              isConflict || isDuplicate
+                                ? 'var(--color-danger-light)'
+                                : idx % 2 === 0
+                                ? '#fafafa'
+                                : '#fff',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                            <span
+                              style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                color:
+                                  isConflict || isDuplicate
+                                    ? 'var(--color-danger)'
+                                    : 'var(--color-primary)',
+                                minWidth: '24px',
+                              }}
+                            >
+                              #{idx + 1}
+                            </span>
+                            {editingIndex === idx ? (
+                              <input
+                                type="text"
+                                className="form-input"
+                                autoFocus
+                                value={editingValue}
+                                onChange={(e) => setEditingValue(e.target.value.toUpperCase())}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveEditSerial(idx);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingIndex(null);
+                                  }
+                                }}
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '0.85rem',
+                                  fontFamily: 'monospace',
+                                  width: '200px',
+                                }}
+                              />
+                            ) : (
+                              <span
+                                style={{
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 600,
+                                  color:
+                                    isConflict || isDuplicate
+                                      ? 'var(--color-danger)'
+                                      : 'var(--color-text)',
+                                }}
+                              >
+                                {sn}
+                                {isConflict && (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-danger)', marginLeft: '6px' }}>
+                                    (in inventory)
+                                  </span>
+                                )}
+                                {isDuplicate && (
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--color-danger)', marginLeft: '6px' }}>
+                                    (duplicate)
+                                  </span>
+                                )}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            {editingIndex === idx ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditSerial(idx)}
+                                  className="btn-icon"
+                                  title="Save edit"
+                                  style={{ color: 'var(--color-green-dark)' }}
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingIndex(null)}
+                                  className="btn-icon"
+                                  title="Cancel"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingIndex(idx);
+                                    setEditingValue(sn);
+                                  }}
+                                  className="btn-icon"
+                                  title="Edit serial"
+                                >
+                                  <Edit size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSerial(idx)}
+                                  className="btn-icon"
+                                  title="Remove"
+                                  style={{ color: 'var(--color-danger)' }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -479,6 +1068,21 @@ export const PurchasesPage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Web Camera Barcode Scanner Modal */}
+      <WebBarcodeScannerModal
+        isOpen={isScannerModalOpen}
+        onClose={() => setIsScannerModalOpen(false)}
+        targetQuantity={Number(formData.quantity) || 1}
+        initialSerials={serials}
+        existingInventorySerials={existingInventorySerials}
+        onSaveSerials={(scanned) => {
+          setSerials(scanned);
+          if (scanned.length > Number(formData.quantity)) {
+            setFormData((prev) => ({ ...prev, quantity: scanned.length }));
+          }
+        }}
+      />
 
       {/* View Purchase Details Modal */}
       {viewPurchase && (

@@ -127,6 +127,7 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           label="Total Purchased"
           value={summary ? `${summary.totalPurchasedPanels} Panels` : '...'}
+          amount={summary ? formatCurrency(summary.totalPurchaseAmount || 0) : undefined}
           subtext="Cumulative inward panels"
           icon={<PackagePlus size={22} color="#f59e0b" />}
           iconBg="#fffbeb"
@@ -134,6 +135,7 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           label="Total Panels Sold"
           value={summary ? `${summary.totalSoldPanels} Panels` : '...'}
+          amount={summary ? formatCurrency(summary.totalSalesAmount || 0) : undefined}
           subtext="Dispatched to customer sites"
           icon={<ShoppingCart size={22} color="#1b75bc" />}
           iconBg="#eff6ff"
@@ -201,14 +203,28 @@ export const DashboardPage: React.FC = () => {
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
+                    alignItems: 'baseline',
                     fontSize: '0.9rem',
                     color: 'var(--text-muted)',
                   }}
                 >
                   <span>Available:</span>
-                  <strong style={{ color: 'var(--color-green-dark)' }}>
-                    {item.availableCount}
-                  </strong>
+                  <div style={{ textAlign: 'right' }}>
+                    <strong style={{ color: 'var(--color-green-dark)' }}>
+                      {item.availableCount} pcs
+                    </strong>
+                    {item.availableAmount !== undefined && (
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          color: 'var(--color-green-dark)',
+                        }}
+                      >
+                        {formatCurrency(item.availableAmount)}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div
                   style={{

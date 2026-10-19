@@ -34,6 +34,13 @@ class PurchaseProvider extends ChangeNotifier {
   int? get wattageFilter => _wattageFilter;
   List<PurchaseTransaction> get allPurchases => _purchases;
 
+  int get totalQuantity => purchases.fold(0, (sum, p) => sum + p.quantity);
+  double get totalAmount =>
+      purchases.fold(0.0, (sum, p) => sum + p.totalPurchaseAmount);
+  int get allTotalQuantity => _purchases.fold(0, (sum, p) => sum + p.quantity);
+  double get allTotalAmount =>
+      _purchases.fold(0.0, (sum, p) => sum + p.totalPurchaseAmount);
+
   List<int> get distinctWattages {
     final set = <int>{540, 450, 400, 330};
     for (final p in _purchases) {

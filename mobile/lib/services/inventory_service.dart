@@ -333,17 +333,24 @@ class InventoryService {
   // ==========================================
   // AGGREGATIONS & REPORTING
   // ==========================================
-  Future<Map<int, Map<String, int>>> getStockByWattage() async {
+  Future<Map<int, Map<String, dynamic>>> getStockByWattage() async {
     final panels = await panelRepository.getAllPanels();
-    final Map<int, Map<String, int>> map = {};
+    final Map<int, Map<String, dynamic>> map = {};
 
     for (final p in panels) {
-      map.putIfAbsent(p.wattage, () => {'available': 0, 'sold': 0, 'total': 0});
-      map[p.wattage]!['total'] = map[p.wattage]!['total']! + 1;
+      map.putIfAbsent(p.wattage, () => {
+        'available': 0,
+        'sold': 0,
+        'total': 0,
+        'availableAmount': 0.0,
+      });
+      map[p.wattage]!['total'] = (map[p.wattage]!['total'] as int) + 1;
       if (p.isAvailable) {
-        map[p.wattage]!['available'] = map[p.wattage]!['available']! + 1;
+        map[p.wattage]!['available'] = (map[p.wattage]!['available'] as int) + 1;
+        map[p.wattage]!['availableAmount'] =
+            (map[p.wattage]!['availableAmount'] as double) + p.purchasePrice;
       } else {
-        map[p.wattage]!['sold'] = map[p.wattage]!['sold']! + 1;
+        map[p.wattage]!['sold'] = (map[p.wattage]!['sold'] as int) + 1;
       }
     }
 
@@ -371,10 +378,11 @@ class InventoryService {
     final List<Map<String, dynamic>> lowStockAlerts = [];
 
     byWattage.forEach((wattage, counts) {
-      if (counts['available']! <= settings.lowStockThreshold) {
+      final availableCount = (counts['available'] as int?) ?? 0;
+      if (availableCount <= settings.lowStockThreshold) {
         lowStockAlerts.add({
           'wattage': wattage,
-          'available': counts['available'],
+          'available': availableCount,
           'threshold': settings.lowStockThreshold,
         });
       }
@@ -383,10 +391,21 @@ class InventoryService {
     final purchases = await purchaseRepository.getAllPurchases();
     final sales = await saleRepository.getAllSales();
 
+    final totalPurchaseAmount = purchases.fold<double>(
+      0.0,
+      (sum, p) => sum + p.totalPurchaseAmount,
+    );
+    final totalSalesAmount = sales.fold<double>(
+      0.0,
+      (sum, s) => sum + s.totalSellingAmount,
+    );
+
     return {
       'totalAvailable': available,
       'totalPurchased': panels.length,
       'totalSold': sold,
+      'totalPurchaseAmount': totalPurchaseAmount,
+      'totalSalesAmount': totalSalesAmount,
       'totalStockValue': stockValue,
       'byWattage': byWattage,
       'lowStockAlerts': lowStockAlerts,

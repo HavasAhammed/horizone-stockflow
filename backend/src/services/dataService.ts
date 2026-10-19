@@ -766,13 +766,14 @@ export class DataService {
   }
 
   public getStockByWattage(): StockByWattage[] {
-    const map = new Map<number, { available: number; sold: number; total: number }>();
+    const map = new Map<number, { available: number; sold: number; total: number; availableAmount: number }>();
 
     for (const panel of this.panels.values()) {
-      const entry = map.get(panel.wattage) || { available: 0, sold: 0, total: 0 };
+      const entry = map.get(panel.wattage) || { available: 0, sold: 0, total: 0, availableAmount: 0 };
       entry.total += 1;
       if (panel.status === 'available') {
         entry.available += 1;
+        entry.availableAmount += panel.purchasePrice;
       } else {
         entry.sold += 1;
       }
@@ -786,6 +787,7 @@ export class DataService {
         availableCount: data.available,
         soldCount: data.sold,
         totalCount: data.total,
+        availableAmount: data.availableAmount,
         lowStockAlert: data.available <= this.lowStockThreshold,
       });
     }
@@ -858,10 +860,22 @@ export class DataService {
     const recentPurchases = this.getAllPurchases().slice(0, 5);
     const recentSales = this.getAllSales().slice(0, 5);
 
+    let totalPurchaseAmount = 0;
+    for (const p of this.purchases.values()) {
+      totalPurchaseAmount += p.totalPurchaseAmount;
+    }
+
+    let totalSalesAmount = 0;
+    for (const s of this.sales.values()) {
+      totalSalesAmount += s.totalSellingAmount;
+    }
+
     return {
       totalAvailablePanels,
       totalPurchasedPanels,
       totalSoldPanels,
+      totalPurchaseAmount: Math.round(totalPurchaseAmount * 100) / 100,
+      totalSalesAmount: Math.round(totalSalesAmount * 100) / 100,
       totalStockValue: Math.round(totalStockValue * 100) / 100,
       lowStockWarnings,
       stockByWattage,

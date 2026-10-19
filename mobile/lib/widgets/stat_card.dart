@@ -4,6 +4,7 @@ import '../core/app_colors.dart';
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
+  final String? amount;
   final String? subtext;
   final IconData icon;
   final Color iconColor;
@@ -13,6 +14,7 @@ class StatCard extends StatelessWidget {
     super.key,
     required this.label,
     required this.value,
+    this.amount,
     this.subtext,
     required this.icon,
     this.iconColor = AppColors.primaryBlue,
@@ -60,6 +62,24 @@ class StatCard extends StatelessWidget {
                 color: AppColors.textMain,
               ),
             ),
+            if (amount != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  amount!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: iconColor,
+                  ),
+                ),
+              ),
+            ],
             if (subtext != null) ...[
               const SizedBox(height: 4),
               Text(

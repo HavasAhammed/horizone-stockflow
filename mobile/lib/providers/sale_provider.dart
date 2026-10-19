@@ -34,6 +34,13 @@ class SaleProvider extends ChangeNotifier {
   int? get wattageFilter => _wattageFilter;
   List<SaleTransaction> get allSales => _sales;
 
+  int get totalQuantity => sales.fold(0, (sum, s) => sum + s.quantity);
+  double get totalAmount =>
+      sales.fold(0.0, (sum, s) => sum + s.totalSellingAmount);
+  int get allTotalQuantity => _sales.fold(0, (sum, s) => sum + s.quantity);
+  double get allTotalAmount =>
+      _sales.fold(0.0, (sum, s) => sum + s.totalSellingAmount);
+
   List<int> get distinctWattages {
     final set = <int>{540, 450, 400, 330};
     for (final s in _sales) {
