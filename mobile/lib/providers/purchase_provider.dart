@@ -67,7 +67,7 @@ class PurchaseProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _purchases = await inventoryService.purchaseRepository.getAllPurchases();
+      _purchases = await inventoryService.getPurchases();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {

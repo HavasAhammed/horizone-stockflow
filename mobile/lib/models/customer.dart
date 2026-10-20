@@ -52,13 +52,17 @@ class Customer {
 
   factory Customer.fromMap(Map<dynamic, dynamic> map) {
     return Customer(
-      id: map['id'] as String,
-      consumerNumber: map['consumerNumber'] as String,
-      phone: map['phone'] as String,
+      id: (map['id'] ?? map['_id'] ?? '').toString(),
+      consumerNumber: (map['consumerNumber'] ?? '').toString(),
+      phone: (map['phone'] ?? '').toString(),
       name: map['name'] as String?,
       address: map['address'] as String?,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }

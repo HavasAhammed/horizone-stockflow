@@ -8,6 +8,7 @@ import '../repositories/panel_repository.dart';
 import '../repositories/purchase_repository.dart';
 import '../repositories/sale_repository.dart';
 import '../repositories/settings_repository.dart';
+import 'api_service.dart';
 
 class InventoryService {
   final CustomerRepository customerRepository;
@@ -15,6 +16,7 @@ class InventoryService {
   final SaleRepository saleRepository;
   final PanelRepository panelRepository;
   final SettingsRepository settingsRepository;
+  final ApiService? apiService;
 
   final Uuid _uuid = const Uuid();
 
@@ -24,11 +26,42 @@ class InventoryService {
     required this.saleRepository,
     required this.panelRepository,
     required this.settingsRepository,
+    this.apiService,
   });
+
+  Future<bool> _shouldUseApi() async {
+    if (apiService == null) return false;
+    final settings = await settingsRepository.getSettings();
+    return !settings.isOfflineMode;
+  }
 
   // ==========================================
   // CUSTOMER OPERATIONS & INVARIANTS
   // ==========================================
+  Future<List<Customer>> getCustomers({String? search}) async {
+    if (await _shouldUseApi()) {
+      try {
+        final list = await apiService!.getCustomers(search: search);
+        for (final c in list) {
+          await customerRepository.saveCustomer(c);
+        }
+        return list;
+      } catch (_) {
+        return customerRepository.getAllCustomers();
+      }
+    }
+    return customerRepository.getAllCustomers();
+  }
+
+  Future<List<SaleTransaction>> getCustomerSales(String customerId) async {
+    if (await _shouldUseApi()) {
+      try {
+        return await apiService!.getCustomerSales(customerId);
+      } catch (_) {}
+    }
+    return saleRepository.getSalesByCustomerId(customerId);
+  }
+
   Future<Customer> createCustomer({
     required String consumerNumber,
     required String phone,
@@ -43,6 +76,17 @@ class InventoryService {
     }
     if (trimmedPhone.isEmpty) {
       throw ArgumentError('Phone number is mandatory.');
+    }
+
+    if (await _shouldUseApi()) {
+      final customer = await apiService!.createCustomer(
+        consumerNumber: trimmedConsumer,
+        phone: trimmedPhone,
+        name: name,
+        address: address,
+      );
+      await customerRepository.saveCustomer(customer);
+      return customer;
     }
 
     final existing =
@@ -75,6 +119,12 @@ class InventoryService {
       throw ArgumentError('Phone number cannot be empty.');
     }
 
+    if (await _shouldUseApi()) {
+      final updated = await apiService!.updateCustomer(customer);
+      await customerRepository.saveCustomer(updated);
+      return;
+    }
+
     final existing =
         await customerRepository.getCustomerByConsumerNumber(trimmedConsumer);
     if (existing != null && existing.id != customer.id) {
@@ -96,6 +146,12 @@ class InventoryService {
   }
 
   Future<void> deleteCustomer(String id) async {
+    if (await _shouldUseApi()) {
+      await apiService!.deleteCustomer(id);
+      await customerRepository.deleteCustomer(id);
+      return;
+    }
+
     final customer = await customerRepository.getCustomerById(id);
     if (customer == null) {
       throw StateError('Customer not found.');
@@ -114,6 +170,29 @@ class InventoryService {
   // ==========================================
   // PURCHASE OPERATIONS & INVARIANTS
   // ==========================================
+  Future<List<PurchaseTransaction>> getPurchases({
+    String? batch,
+    int? wattage,
+    String? search,
+  }) async {
+    if (await _shouldUseApi()) {
+      try {
+        final list = await apiService!.getPurchases(
+          batch: batch,
+          wattage: wattage,
+          search: search,
+        );
+        for (final p in list) {
+          await purchaseRepository.savePurchase(p);
+        }
+        return list;
+      } catch (_) {
+        return purchaseRepository.getAllPurchases();
+      }
+    }
+    return purchaseRepository.getAllPurchases();
+  }
+
   Future<PurchaseTransaction> createPurchase({
     DateTime? purchaseDate,
     String? supplierName,
@@ -146,6 +225,38 @@ class InventoryService {
     if (cleanSerials.length != quantity) {
       throw ArgumentError(
           'Serial numbers count (${cleanSerials.length}) must match purchase quantity ($quantity).');
+    }
+
+    if (await _shouldUseApi()) {
+      final purchase = await apiService!.createPurchase(
+        purchaseDate: purchaseDate,
+        supplierName: supplierName,
+        batchNumber: trimmedBatch,
+        wattage: wattage,
+        quantity: quantity,
+        serialNumbers: cleanSerials,
+        unitPurchasePrice: unitPurchasePrice,
+        notes: notes,
+      );
+      await purchaseRepository.savePurchase(purchase);
+
+      final List<PanelItem> panels = cleanSerials.map((sn) {
+        return PanelItem(
+          id: sn,
+          serialNumber: sn,
+          batchNumber: trimmedBatch,
+          wattage: wattage,
+          purchaseId: purchase.id,
+          purchasePrice: unitPurchasePrice,
+          status: PanelStatus.available,
+          saleId: null,
+          createdAt: purchaseDate ?? DateTime.now(),
+          updatedAt: purchaseDate ?? DateTime.now(),
+        );
+      }).toList();
+      await panelRepository.savePanels(panels);
+
+      return purchase;
     }
 
     // Duplicate check within submitted batch
@@ -207,6 +318,16 @@ class InventoryService {
   }
 
   Future<void> deletePurchase(String purchaseId) async {
+    if (await _shouldUseApi()) {
+      final local = await purchaseRepository.getPurchaseById(purchaseId);
+      await apiService!.deletePurchase(purchaseId);
+      if (local != null) {
+        await panelRepository.deletePanels(local.serialNumbers);
+      }
+      await purchaseRepository.deletePurchase(purchaseId);
+      return;
+    }
+
     final purchase = await purchaseRepository.getPurchaseById(purchaseId);
     if (purchase == null) throw StateError('Purchase record not found.');
 
@@ -227,6 +348,29 @@ class InventoryService {
   // ==========================================
   // SALE OPERATIONS & INVARIANTS
   // ==========================================
+  Future<List<SaleTransaction>> getSales({
+    String? customerId,
+    int? wattage,
+    String? search,
+  }) async {
+    if (await _shouldUseApi()) {
+      try {
+        final list = await apiService!.getSales(
+          customerId: customerId,
+          wattage: wattage,
+          search: search,
+        );
+        for (final s in list) {
+          await saleRepository.saveSale(s);
+        }
+        return list;
+      } catch (_) {
+        return saleRepository.getAllSales();
+      }
+    }
+    return saleRepository.getAllSales();
+  }
+
   Future<SaleTransaction> createSale({
     DateTime? saleDate,
     required String customerId,
@@ -235,11 +379,6 @@ class InventoryService {
     required double unitSellingPrice,
     String? notes,
   }) async {
-    final customer = await customerRepository.getCustomerById(customerId);
-    if (customer == null) {
-      throw StateError('Selected customer not found.');
-    }
-
     if (panelWattage <= 0) {
       throw ArgumentError('Wattage must be a positive integer.');
     }
@@ -254,6 +393,35 @@ class InventoryService {
 
     if (cleanSerials.isEmpty) {
       throw ArgumentError('At least one panel serial must be selected.');
+    }
+
+    if (await _shouldUseApi()) {
+      final sale = await apiService!.createSale(
+        saleDate: saleDate,
+        customerId: customerId,
+        panelWattage: panelWattage,
+        serialNumbers: cleanSerials,
+        unitSellingPrice: unitSellingPrice,
+        notes: notes,
+      );
+      await saleRepository.saveSale(sale);
+
+      for (final sn in cleanSerials) {
+        final panel = await panelRepository.getPanelBySerialNumber(sn);
+        if (panel != null) {
+          await panelRepository.savePanel(panel.copyWith(
+            status: PanelStatus.sold,
+            saleId: sale.id,
+            updatedAt: DateTime.now(),
+          ));
+        }
+      }
+      return sale;
+    }
+
+    final customer = await customerRepository.getCustomerById(customerId);
+    if (customer == null) {
+      throw StateError('Selected customer not found.');
     }
 
     // Verify all selected panels exist, match wattage, and are currently available
@@ -310,6 +478,25 @@ class InventoryService {
   }
 
   Future<void> deleteSale(String saleId) async {
+    if (await _shouldUseApi()) {
+      final local = await saleRepository.getSaleById(saleId);
+      await apiService!.deleteSale(saleId);
+      if (local != null) {
+        for (final sn in local.serialNumbers) {
+          final panel = await panelRepository.getPanelBySerialNumber(sn);
+          if (panel != null) {
+            await panelRepository.savePanel(panel.copyWith(
+              status: PanelStatus.available,
+              clearSaleId: true,
+              updatedAt: DateTime.now(),
+            ));
+          }
+        }
+      }
+      await saleRepository.deleteSale(saleId);
+      return;
+    }
+
     final sale = await saleRepository.getSaleById(saleId);
     if (sale == null) throw StateError('Sale record not found.');
 
@@ -333,7 +520,47 @@ class InventoryService {
   // ==========================================
   // AGGREGATIONS & REPORTING
   // ==========================================
+  Future<List<PanelItem>> getPanels({
+    int? wattage,
+    String? batch,
+    String? status,
+    String? search,
+  }) async {
+    if (await _shouldUseApi()) {
+      try {
+        final list = await apiService!.getInventory(
+          wattage: wattage,
+          batch: batch,
+          status: status,
+          search: search,
+        );
+        await panelRepository.savePanels(list);
+        return list;
+      } catch (_) {
+        return panelRepository.getAllPanels();
+      }
+    }
+    return panelRepository.getAllPanels();
+  }
+
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async {
+    if (await _shouldUseApi()) {
+      try {
+        return await apiService!.getAvailablePanelsByWattage(wattage);
+      } catch (_) {
+        return panelRepository.getAvailablePanelsByWattage(wattage);
+      }
+    }
+    return panelRepository.getAvailablePanelsByWattage(wattage);
+  }
+
   Future<Map<int, Map<String, dynamic>>> getStockByWattage() async {
+    if (await _shouldUseApi()) {
+      try {
+        return await apiService!.getStockByWattage();
+      } catch (_) {}
+    }
+
     final panels = await panelRepository.getAllPanels();
     final Map<int, Map<String, dynamic>> map = {};
 
@@ -358,6 +585,12 @@ class InventoryService {
   }
 
   Future<Map<String, dynamic>> getDashboardMetrics() async {
+    if (await _shouldUseApi()) {
+      try {
+        return await apiService!.getDashboardSummary();
+      } catch (_) {}
+    }
+
     final panels = await panelRepository.getAllPanels();
     final settings = await settingsRepository.getSettings();
 
@@ -414,7 +647,6 @@ class InventoryService {
     };
   }
 
-  // Initial Seed for Offline Demo
   Future<void> seedIfEmpty() async {
     // Clean initial state for real-world production usage
   }

@@ -10,7 +10,7 @@ class AppSettings {
     this.currencySymbol = '₹',
     this.lowStockThreshold = 100,
     this.apiBaseUrl = 'https://horizone-stockflow.onrender.com/api/v1',
-    this.isOfflineMode = true,
+    this.isOfflineMode = false,
   });
 
   AppSettings copyWith({
@@ -46,7 +46,7 @@ class AppSettings {
       lowStockThreshold: (map['lowStockThreshold'] as int?) ?? 100,
       apiBaseUrl: (map['apiBaseUrl'] as String?) ??
           'https://horizone-stockflow.onrender.com/api/v1',
-      isOfflineMode: (map['isOfflineMode'] as bool?) ?? true,
+      isOfflineMode: (map['isOfflineMode'] as bool?) ?? false,
     );
   }
 }

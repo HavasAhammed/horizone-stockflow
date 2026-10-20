@@ -67,7 +67,7 @@ class SaleProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _sales = await inventoryService.saleRepository.getAllSales();
+      _sales = await inventoryService.getSales();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {

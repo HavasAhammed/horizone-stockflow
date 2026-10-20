@@ -8,6 +8,7 @@ import 'repositories/purchase_repository.dart';
 import 'repositories/sale_repository.dart';
 import 'repositories/panel_repository.dart';
 import 'repositories/settings_repository.dart';
+import 'services/api_service.dart';
 import 'services/inventory_service.dart';
 
 import 'providers/auth_provider.dart';
@@ -40,6 +41,8 @@ void main() async {
   final saleRepo = HiveSaleRepository();
   final panelRepo = HivePanelRepository();
   final settingsRepo = HiveSettingsRepository();
+  final initialSettings = await settingsRepo.getSettings();
+  final apiService = ApiService(baseUrl: initialSettings.apiBaseUrl);
 
   // Initialize Centralized Inventory Service
   final inventoryService = InventoryService(
@@ -48,6 +51,7 @@ void main() async {
     saleRepository: saleRepo,
     panelRepository: panelRepo,
     settingsRepository: settingsRepo,
+    apiService: apiService,
   );
 
   // Seed sample data on first run for out-of-the-box demonstration

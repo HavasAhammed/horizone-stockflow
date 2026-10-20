@@ -37,7 +37,7 @@ class CustomerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _customers = await inventoryService.customerRepository.getAllCustomers();
+      _customers = await inventoryService.getCustomers();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -73,6 +73,6 @@ class CustomerProvider extends ChangeNotifier {
   }
 
   Future<List<SaleTransaction>> getCustomerSales(String customerId) async {
-    return inventoryService.saleRepository.getSalesByCustomerId(customerId);
+    return inventoryService.getCustomerSales(customerId);
   }
 }

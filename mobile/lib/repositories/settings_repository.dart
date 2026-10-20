@@ -20,11 +20,10 @@ class HiveSettingsRepository implements SettingsRepository {
       await saveSettings(defaultSettings);
       return defaultSettings;
     }
-    final settings = AppSettings.fromMap(raw as Map);
+    var settings = AppSettings.fromMap(raw as Map);
     if (settings.lowStockThreshold == 10) {
-      final updated = settings.copyWith(lowStockThreshold: 100);
-      await saveSettings(updated);
-      return updated;
+      settings = settings.copyWith(lowStockThreshold: 100);
+      await saveSettings(settings);
     }
     return settings;
   }

@@ -82,19 +82,27 @@ class SaleTransaction {
 
   factory SaleTransaction.fromMap(Map<dynamic, dynamic> map) {
     return SaleTransaction(
-      id: map['id'] as String,
-      saleDate: DateTime.parse(map['saleDate'] as String),
-      customerId: map['customerId'] as String,
-      consumerNumber: map['consumerNumber'] as String,
+      id: (map['id'] ?? map['_id'] ?? '').toString(),
+      saleDate: map['saleDate'] != null
+          ? DateTime.tryParse(map['saleDate'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      customerId: (map['customerId'] ?? '').toString(),
+      consumerNumber: (map['consumerNumber'] ?? '').toString(),
       customerName: map['customerName'] as String?,
-      panelWattage: map['panelWattage'] as int,
-      quantity: map['quantity'] as int,
-      serialNumbers: List<String>.from(map['serialNumbers'] as List),
-      unitSellingPrice: (map['unitSellingPrice'] as num).toDouble(),
-      totalSellingAmount: (map['totalSellingAmount'] as num).toDouble(),
+      panelWattage: ((map['panelWattage'] ?? 0) as num).toInt(),
+      quantity: ((map['quantity'] ?? 0) as num).toInt(),
+      serialNumbers: map['serialNumbers'] != null
+          ? List<String>.from((map['serialNumbers'] as List).map((e) => e.toString()))
+          : <String>[],
+      unitSellingPrice: ((map['unitSellingPrice'] ?? 0.0) as num).toDouble(),
+      totalSellingAmount: ((map['totalSellingAmount'] ?? 0.0) as num).toDouble(),
       notes: map['notes'] as String?,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }

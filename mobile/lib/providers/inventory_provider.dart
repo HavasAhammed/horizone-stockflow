@@ -75,7 +75,7 @@ class InventoryProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _panels = await inventoryService.panelRepository.getAllPanels();
+      _panels = await inventoryService.getPanels();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -85,6 +85,6 @@ class InventoryProvider extends ChangeNotifier {
   }
 
   Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async {
-    return inventoryService.panelRepository.getAvailablePanelsByWattage(wattage);
+    return inventoryService.getAvailablePanelsByWattage(wattage);
   }
 }

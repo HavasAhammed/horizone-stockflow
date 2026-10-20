@@ -73,18 +73,22 @@ class PanelItem {
 
   factory PanelItem.fromMap(Map<dynamic, dynamic> map) {
     return PanelItem(
-      id: map['id'] as String,
-      serialNumber: map['serialNumber'] as String,
-      batchNumber: map['batchNumber'] as String,
-      wattage: map['wattage'] as int,
-      purchaseId: map['purchaseId'] as String,
-      purchasePrice: (map['purchasePrice'] as num).toDouble(),
-      status: (map['status'] as String) == 'sold'
+      id: (map['id'] ?? map['_id'] ?? '').toString(),
+      serialNumber: (map['serialNumber'] ?? '').toString(),
+      batchNumber: (map['batchNumber'] ?? '').toString(),
+      wattage: ((map['wattage'] ?? 0) as num).toInt(),
+      purchaseId: (map['purchaseId'] ?? '').toString(),
+      purchasePrice: ((map['purchasePrice'] ?? 0.0) as num).toDouble(),
+      status: (map['status']?.toString().toLowerCase()) == 'sold'
           ? PanelStatus.sold
           : PanelStatus.available,
-      saleId: map['saleId'] as String?,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      saleId: map['saleId']?.toString(),
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }

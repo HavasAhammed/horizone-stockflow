@@ -77,18 +77,26 @@ class PurchaseTransaction {
 
   factory PurchaseTransaction.fromMap(Map<dynamic, dynamic> map) {
     return PurchaseTransaction(
-      id: map['id'] as String,
-      purchaseDate: DateTime.parse(map['purchaseDate'] as String),
+      id: (map['id'] ?? map['_id'] ?? '').toString(),
+      purchaseDate: map['purchaseDate'] != null
+          ? DateTime.tryParse(map['purchaseDate'].toString()) ?? DateTime.now()
+          : DateTime.now(),
       supplierName: map['supplierName'] as String?,
-      batchNumber: map['batchNumber'] as String,
-      wattage: map['wattage'] as int,
-      quantity: map['quantity'] as int,
-      serialNumbers: List<String>.from(map['serialNumbers'] as List),
-      unitPurchasePrice: (map['unitPurchasePrice'] as num).toDouble(),
-      totalPurchaseAmount: (map['totalPurchaseAmount'] as num).toDouble(),
+      batchNumber: (map['batchNumber'] ?? '').toString(),
+      wattage: ((map['wattage'] ?? 0) as num).toInt(),
+      quantity: ((map['quantity'] ?? 0) as num).toInt(),
+      serialNumbers: map['serialNumbers'] != null
+          ? List<String>.from((map['serialNumbers'] as List).map((e) => e.toString()))
+          : <String>[],
+      unitPurchasePrice: ((map['unitPurchasePrice'] ?? 0.0) as num).toDouble(),
+      totalPurchaseAmount: ((map['totalPurchaseAmount'] ?? 0.0) as num).toDouble(),
       notes: map['notes'] as String?,
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      updatedAt: DateTime.parse(map['updatedAt'] as String),
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.tryParse(map['updatedAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }

@@ -4,6 +4,11 @@ import '../../core/app_colors.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/dashboard_provider.dart';
+import '../../providers/customer_provider.dart';
+import '../../providers/purchase_provider.dart';
+import '../../providers/sale_provider.dart';
+import '../../providers/inventory_provider.dart';
+import '../../services/api_service.dart';
 import '../../widgets/badge_widget.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../login_screen.dart';
@@ -18,6 +23,7 @@ class ProfileSettingsScreen extends StatefulWidget {
 class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   late TextEditingController _thresholdController;
   late TextEditingController _apiUrlController;
+  bool _isTestingConnection = false;
 
   @override
   void initState() {
@@ -34,6 +40,33 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     _thresholdController.dispose();
     _apiUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _testConnection(String url) async {
+    setState(() => _isTestingConnection = true);
+    final api = ApiService(baseUrl: url);
+    final isHealthy = await api.checkHealth();
+    if (!mounted) return;
+    setState(() => _isTestingConnection = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: isHealthy ? AppColors.solarGreen : AppColors.danger,
+        content: Text(
+          isHealthy
+              ? '✓ Successfully connected to Horizone Cloud API (MongoDB)'
+              : '⚠️ Unable to connect to $url. Check URL or internet connection.',
+        ),
+      ),
+    );
+  }
+
+  void _refreshAll() {
+    context.read<DashboardProvider>().loadDashboard();
+    context.read<CustomerProvider>().loadCustomers();
+    context.read<PurchaseProvider>().loadPurchases();
+    context.read<SaleProvider>().loadSales();
+    context.read<InventoryProvider>().loadPanels();
   }
 
   @override
@@ -66,7 +99,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Stock Manager (Local Admin)',
+                          'Stock Manager',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -84,11 +117,126 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 6),
-                        const BadgeWidget(
-                          text: 'Offline Local Operator',
-                          type: BadgeType.info,
+                        BadgeWidget(
+                          text: settings.isOfflineMode
+                              ? 'Offline Local Mode'
+                              : 'Cloud Sync (MongoDB)',
+                          type: settings.isOfflineMode
+                              ? BadgeType.neutral
+                              : BadgeType.success,
                         ),
                       ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Cloud Database Synchronization Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Cloud Database Sync',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textMain,
+                        ),
+                      ),
+                      Switch(
+                        value: !settings.isOfflineMode,
+                        activeThumbColor: AppColors.primaryBlue,
+                        onChanged: (enabled) async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          final settingsProv = context.read<SettingsProvider>();
+                          await settingsProv.updateSettings(
+                            settings.copyWith(isOfflineMode: !enabled),
+                          );
+                          if (!mounted) return;
+                          _refreshAll();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                enabled
+                                    ? 'Cloud sync enabled. App is connected to MongoDB.'
+                                    : 'Offline mode enabled. Changes will stay on this device.',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Synchronizes all panel inventory, purchases, and sales in real-time with the web portal.',
+                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  const Divider(height: 24),
+                  const Text(
+                    'API Base URL',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMain,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _apiUrlController,
+                    decoration: InputDecoration(
+                      hintText: 'https://horizone-stockflow.onrender.com/api/v1',
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.check, color: AppColors.primaryBlue),
+                        tooltip: 'Save API URL',
+                        onPressed: () async {
+                          final newUrl = _apiUrlController.text.trim();
+                          if (newUrl.isNotEmpty) {
+                            final messenger = ScaffoldMessenger.of(context);
+                            final settingsProv = context.read<SettingsProvider>();
+                            await settingsProv.updateSettings(
+                              settings.copyWith(apiBaseUrl: newUrl),
+                            );
+                            if (!mounted) return;
+                            _refreshAll();
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('API Base URL updated successfully.'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: _isTestingConnection
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.network_check, size: 16),
+                      label: Text(_isTestingConnection
+                          ? 'Checking Server...'
+                          : 'Test Cloud Connection'),
+                      onPressed: _isTestingConnection
+                          ? null
+                          : () => _testConnection(_apiUrlController.text.trim()),
                     ),
                   ),
                 ],
@@ -111,6 +259,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   icon: Icons.solar_power_outlined,
                   title: 'Organization',
                   value: 'Horizone Energy',
+                ),
+                const Divider(height: 1),
+                _settingTile(
+                  icon: Icons.cloud_done_outlined,
+                  title: 'Shared Database',
+                  value: 'MongoDB Atlas',
                 ),
                 const Divider(height: 1),
                 _settingTile(
