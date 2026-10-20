@@ -9,7 +9,7 @@ class AppSettings {
     this.currency = 'INR',
     this.currencySymbol = '₹',
     this.lowStockThreshold = 100,
-    this.apiBaseUrl = 'http://localhost:5050/api/v1',
+    this.apiBaseUrl = 'https://horizone-stockflow.onrender.com/api/v1',
     this.isOfflineMode = true,
   });
 
@@ -44,8 +44,8 @@ class AppSettings {
       currency: (map['currency'] as String?) ?? 'INR',
       currencySymbol: (map['currencySymbol'] as String?) ?? '₹',
       lowStockThreshold: (map['lowStockThreshold'] as int?) ?? 100,
-      apiBaseUrl:
-          (map['apiBaseUrl'] as String?) ?? 'http://localhost:5050/api/v1',
+      apiBaseUrl: (map['apiBaseUrl'] as String?) ??
+          'https://horizone-stockflow.onrender.com/api/v1',
       isOfflineMode: (map['isOfflineMode'] as bool?) ?? true,
     );
   }
