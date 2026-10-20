@@ -25,6 +25,13 @@ class HiveSettingsRepository implements SettingsRepository {
       settings = settings.copyWith(lowStockThreshold: 100);
       await saveSettings(settings);
     }
+    if (settings.apiBaseUrl.contains('localhost') || settings.apiBaseUrl.isEmpty) {
+      settings = settings.copyWith(
+        apiBaseUrl: 'https://horizone-stockflow.onrender.com/api/v1',
+        isOfflineMode: false,
+      );
+      await saveSettings(settings);
+    }
     return settings;
   }
 

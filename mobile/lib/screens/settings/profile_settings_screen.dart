@@ -29,7 +29,16 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final settings = context.read<SettingsProvider>().settings;
+    var settings = context.read<SettingsProvider>().settings;
+    if (settings.apiBaseUrl.contains('localhost') || settings.apiBaseUrl.isEmpty) {
+      settings = settings.copyWith(
+        apiBaseUrl: 'https://horizone-stockflow.onrender.com/api/v1',
+        isOfflineMode: false,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<SettingsProvider>().updateSettings(settings);
+      });
+    }
     _thresholdController = TextEditingController(
       text: settings.lowStockThreshold.toString(),
     );
@@ -66,8 +75,22 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     setState(() => _isSyncing = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final settingsProv = context.read<SettingsProvider>();
       final inventoryService = context.read<CustomerProvider>().inventoryService;
+      var settings = settingsProv.settings;
+      if (_apiUrlController.text.trim().contains('localhost') ||
+          settings.apiBaseUrl.contains('localhost')) {
+        const cloudUrl = 'https://horizone-stockflow.onrender.com/api/v1';
+        _apiUrlController.text = cloudUrl;
+        settings = settings.copyWith(apiBaseUrl: cloudUrl, isOfflineMode: false);
+        await settingsProv.updateSettings(settings);
+      } else if (settings.isOfflineMode) {
+        settings = settings.copyWith(isOfflineMode: false);
+        await settingsProv.updateSettings(settings);
+      }
+
       final res = await inventoryService.syncLocalDataToCloud();
+      if (!mounted) return;
       _refreshAll();
       messenger.showSnackBar(
         SnackBar(
@@ -78,6 +101,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
           backgroundColor: AppColors.danger,
@@ -248,6 +272,38 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       ),
                     ),
                   ),
+                  if (settings.apiBaseUrl.contains('localhost') ||
+                      _apiUrlController.text.contains('localhost')) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(50, 24),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        icon: const Icon(Icons.cloud_done, size: 14, color: AppColors.primaryBlue),
+                        label: const Text(
+                          'Switch to Live Cloud Server (Render)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                        onPressed: () async {
+                          const liveUrl = 'https://horizone-stockflow.onrender.com/api/v1';
+                          _apiUrlController.text = liveUrl;
+                          await context.read<SettingsProvider>().updateSettings(
+                            settings.copyWith(apiBaseUrl: liveUrl, isOfflineMode: false),
+                          );
+                          if (!mounted) return;
+                          _refreshAll();
+                        },
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [

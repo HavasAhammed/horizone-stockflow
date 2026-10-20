@@ -32,6 +32,7 @@ class InventoryService {
   Future<bool> _shouldUseApi() async {
     if (apiService == null) return false;
     final settings = await settingsRepository.getSettings();
+    apiService!.baseUrl = settings.apiBaseUrl;
     return !settings.isOfflineMode;
   }
 
@@ -677,6 +678,8 @@ class InventoryService {
     if (apiService == null) {
       throw StateError('Cannot sync: Cloud API service is not configured.');
     }
+    final settings = await settingsRepository.getSettings();
+    apiService!.baseUrl = settings.apiBaseUrl;
 
     int customersSynced = 0;
     int purchasesSynced = 0;
