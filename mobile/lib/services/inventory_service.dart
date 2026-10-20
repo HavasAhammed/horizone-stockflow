@@ -670,4 +670,107 @@ class InventoryService {
       await customerRepository.deleteCustomer(c.id);
     }
   }
+
+  /// Migrates all existing local Hive data (customers, purchases, panels, sales)
+  /// to the live Cloud MongoDB database via the REST API.
+  Future<Map<String, int>> syncLocalDataToCloud() async {
+    if (apiService == null) {
+      throw StateError('Cannot sync: Cloud API service is not configured.');
+    }
+
+    int customersSynced = 0;
+    int purchasesSynced = 0;
+    int salesSynced = 0;
+
+    // 1. Sync Customers
+    final localCustomers = await customerRepository.getAllCustomers();
+    final cloudCustomers = await apiService!.getCustomers();
+    final cloudConsumerNumbers = cloudCustomers
+        .map((c) => c.consumerNumber.trim().toLowerCase())
+        .toSet();
+
+    for (final cust in localCustomers) {
+      if (!cloudConsumerNumbers.contains(cust.consumerNumber.trim().toLowerCase())) {
+        try {
+          await apiService!.createCustomer(
+            consumerNumber: cust.consumerNumber,
+            phone: cust.phone,
+            name: cust.name,
+            address: cust.address,
+          );
+          customersSynced++;
+        } catch (_) {}
+      }
+    }
+
+    // Refresh cloud customers to map consumer numbers to cloud customer IDs
+    final updatedCloudCustomers = await apiService!.getCustomers();
+    final consumerToCloudId = {
+      for (final c in updatedCloudCustomers)
+        c.consumerNumber.trim().toLowerCase(): c.id
+    };
+
+    // 2. Sync Purchases
+    final localPurchases = await purchaseRepository.getAllPurchases();
+    final cloudPurchases = await apiService!.getPurchases();
+    final cloudBatches = cloudPurchases
+        .map((p) => p.batchNumber.trim().toLowerCase())
+        .toSet();
+
+    for (final purch in localPurchases) {
+      if (!cloudBatches.contains(purch.batchNumber.trim().toLowerCase())) {
+        try {
+          await apiService!.createPurchase(
+            purchaseDate: purch.purchaseDate,
+            supplierName: purch.supplierName,
+            batchNumber: purch.batchNumber,
+            wattage: purch.wattage,
+            quantity: purch.quantity,
+            serialNumbers: purch.serialNumbers,
+            unitPurchasePrice: purch.unitPurchasePrice,
+            notes: purch.notes,
+          );
+          purchasesSynced++;
+        } catch (_) {}
+      }
+    }
+
+    // 3. Sync Sales
+    final localSales = await saleRepository.getAllSales();
+    final cloudSales = await apiService!.getSales();
+    final cloudSaleSerials = <String>{};
+    for (final s in cloudSales) {
+      cloudSaleSerials.addAll(s.serialNumbers.map((sn) => sn.toUpperCase()));
+    }
+
+    for (final sale in localSales) {
+      final alreadySold = sale.serialNumbers.any(
+        (sn) => cloudSaleSerials.contains(sn.toUpperCase()),
+      );
+      if (!alreadySold) {
+        final cloudCustomerId =
+            consumerToCloudId[sale.consumerNumber.trim().toLowerCase()];
+        if (cloudCustomerId != null) {
+          try {
+            await apiService!.createSale(
+              saleDate: sale.saleDate,
+              customerId: cloudCustomerId,
+              panelWattage: sale.panelWattage,
+              serialNumbers: sale.serialNumbers,
+              unitSellingPrice: sale.unitSellingPrice,
+              notes: sale.notes,
+            );
+            salesSynced++;
+          } catch (_) {}
+        }
+      }
+    }
+
+    return {
+      'customers': customersSynced,
+      'purchases': purchasesSynced,
+      'sales': salesSynced,
+    };
+  }
 }
+

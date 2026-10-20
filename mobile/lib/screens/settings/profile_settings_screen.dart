@@ -24,6 +24,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   late TextEditingController _thresholdController;
   late TextEditingController _apiUrlController;
   bool _isTestingConnection = false;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -59,6 +60,33 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _syncLocalData() async {
+    setState(() => _isSyncing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final inventoryService = context.read<CustomerProvider>().inventoryService;
+      final res = await inventoryService.syncLocalDataToCloud();
+      _refreshAll();
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.solarGreen,
+          content: Text(
+            '✓ Synced ${res['customers']} customer(s), ${res['purchases']} purchase(s), ${res['sales']} sale(s) to Cloud MongoDB.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.danger,
+          content: Text('Sync error: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   void _refreshAll() {
@@ -221,23 +249,47 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: _isTestingConnection
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.network_check, size: 16),
-                      label: Text(_isTestingConnection
-                          ? 'Checking Server...'
-                          : 'Test Cloud Connection'),
-                      onPressed: _isTestingConnection
-                          ? null
-                          : () => _testConnection(_apiUrlController.text.trim()),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: _isTestingConnection
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.network_check, size: 16),
+                          label: Text(_isTestingConnection
+                              ? 'Testing...'
+                              : 'Test Connection'),
+                          onPressed: _isTestingConnection
+                              ? null
+                              : () => _testConnection(_apiUrlController.text.trim()),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryBlue,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: _isSyncing
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.cloud_upload_outlined, size: 16),
+                          label: Text(_isSyncing ? 'Syncing...' : 'Upload Local Data'),
+                          onPressed: _isSyncing ? null : _syncLocalData,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
