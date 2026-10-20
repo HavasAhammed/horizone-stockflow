@@ -1,17 +1,100 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../models/panel_item.dart';
+import '../../models/purchase.dart';
 import '../../models/sale.dart';
 import '../../providers/sale_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../providers/inventory_provider.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../utils/formatters.dart';
+import '../purchase/purchase_detail_screen.dart';
 
-class SaleDetailScreen extends StatelessWidget {
+class SaleDetailScreen extends StatefulWidget {
   final SaleTransaction sale;
 
   const SaleDetailScreen({super.key, required this.sale});
+
+  @override
+  State<SaleDetailScreen> createState() => _SaleDetailScreenState();
+}
+
+class _SaleDetailScreenState extends State<SaleDetailScreen> {
+  Map<String, PanelItem> _panelsBySerial = {};
+  Map<String, PurchaseTransaction> _purchasesById = {};
+  bool _isLoadingDetails = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPanelAndPurchaseDetails();
+  }
+
+  Future<void> _loadPanelAndPurchaseDetails() async {
+    try {
+      final inventoryService =
+          context.read<InventoryProvider>().inventoryService;
+      final allPurchases =
+          await inventoryService.purchaseRepository.getAllPurchases();
+      final panelsMap = <String, PanelItem>{};
+      final purchasesMap = <String, PurchaseTransaction>{};
+
+      for (final sn in widget.sale.serialNumbers) {
+        var panel =
+            await inventoryService.panelRepository.getPanelBySerialNumber(sn);
+        PurchaseTransaction? purchase;
+
+        if (panel != null) {
+          panelsMap[sn] = panel;
+          if (panel.purchaseId.isNotEmpty) {
+            purchase = await inventoryService.purchaseRepository
+                .getPurchaseById(panel.purchaseId);
+          }
+          purchase ??= allPurchases.where((p) {
+            return p.batchNumber == panel.batchNumber ||
+                p.serialNumbers.contains(sn);
+          }).firstOrNull;
+        } else {
+          purchase = allPurchases.where((p) {
+            return p.serialNumbers.contains(sn);
+          }).firstOrNull;
+
+          if (purchase != null) {
+            final syntheticPanel = PanelItem(
+              id: 'item_$sn',
+              serialNumber: sn,
+              batchNumber: purchase.batchNumber,
+              wattage: purchase.wattage,
+              purchaseId: purchase.id,
+              purchasePrice: purchase.unitPurchasePrice,
+              status: PanelStatus.sold,
+              saleId: widget.sale.id,
+            );
+            panelsMap[sn] = syntheticPanel;
+          }
+        }
+
+        if (purchase != null && !purchasesMap.containsKey(purchase.id)) {
+          purchasesMap[purchase.id] = purchase;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _panelsBySerial = panelsMap;
+          _purchasesById = purchasesMap;
+          _isLoadingDetails = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingDetails = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,14 +110,14 @@ class SaleDetailScreen extends StatelessWidget {
                 context: context,
                 title: 'Cancel Sale & Return Panels?',
                 message:
-                    'All ${sale.serialNumbers.length} allocated solar panel(s) will be returned to available inventory immediately.',
+                    'All ${widget.sale.serialNumbers.length} allocated solar panel(s) will be returned to available inventory immediately.',
                 confirmText: 'Cancel Sale & Restore Stock',
                 isDestructive: true,
               );
 
               if (confirmed && context.mounted) {
                 try {
-                  await context.read<SaleProvider>().deleteSale(sale.id);
+                  await context.read<SaleProvider>().deleteSale(widget.sale.id);
                   if (context.mounted) {
                     context.read<DashboardProvider>().loadDashboard();
                     context.read<InventoryProvider>().loadPanels();
@@ -89,7 +172,7 @@ class SaleDetailScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              sale.customerName ?? 'Customer',
+                              widget.sale.customerName ?? 'Customer',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -97,7 +180,7 @@ class SaleDetailScreen extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              'KSEB Consumer #: ${sale.consumerNumber}',
+                              'KSEB Consumer #: ${widget.sale.consumerNumber}',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontFamily: 'monospace',
@@ -111,18 +194,20 @@ class SaleDetailScreen extends StatelessWidget {
                     ],
                   ),
                   const Divider(height: 24),
-                  _infoRow('Sale Date', Formatters.formatDate(sale.saleDate)),
-                  _infoRow('Panel Wattage', '${sale.panelWattage}W'),
-                  _infoRow('Dispatched Quantity', '${sale.quantity} Panels'),
+                  _infoRow(
+                      'Sale Date', Formatters.formatDate(widget.sale.saleDate)),
+                  _infoRow('Panel Wattage', '${widget.sale.panelWattage}W'),
+                  _infoRow('Dispatched Quantity',
+                      '${widget.sale.quantity} Panels'),
                   _infoRow('Unit Selling Price',
-                      Formatters.formatCurrency(sale.unitSellingPrice)),
+                      Formatters.formatCurrency(widget.sale.unitSellingPrice)),
                   _infoRow(
                     'Total Selling Amount',
-                    Formatters.formatCurrency(sale.totalSellingAmount),
+                    Formatters.formatCurrency(widget.sale.totalSellingAmount),
                     isBold: true,
                     valueColor: AppColors.solarGreenDark,
                   ),
-                  if (sale.notes != null) ...[
+                  if (widget.sale.notes != null) ...[
                     const Divider(height: 24),
                     const Text('Notes',
                         style: TextStyle(
@@ -130,13 +215,167 @@ class SaleDetailScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: AppColors.textSecondary)),
                     const SizedBox(height: 4),
-                    Text(sale.notes!, style: const TextStyle(fontSize: 13)),
+                    Text(widget.sale.notes!,
+                        style: const TextStyle(fontSize: 13)),
                   ],
                 ],
               ),
             ),
           ),
           const SizedBox(height: 20),
+
+          // Source Inward Purchase Information
+          if (_isLoadingDetails) ...[
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+          ] else if (_purchasesById.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Source Inward Purchase',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMain,
+                  ),
+                ),
+                Text(
+                  '${_purchasesById.length} ${_purchasesById.length == 1 ? 'batch' : 'batches'}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primaryBlue,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ..._purchasesById.values.map((purchase) {
+              final countInSale = widget.sale.serialNumbers.where((sn) {
+                final p = _panelsBySerial[sn];
+                return p?.purchaseId == purchase.id ||
+                    p?.batchNumber == purchase.batchNumber ||
+                    purchase.serialNumbers.contains(sn);
+              }).length;
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlueLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.receipt_long,
+                                    color: AppColors.primaryBlue, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Batch: ${purchase.batchNumber}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textMain,
+                                    ),
+                                  ),
+                                  if (purchase.supplierName != null &&
+                                      purchase.supplierName!.isNotEmpty)
+                                    Text(
+                                      purchase.supplierName!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlueLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${purchase.wattage}W',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 20),
+                      _infoRow('Purchase Date',
+                          Formatters.formatDate(purchase.purchaseDate)),
+                      _infoRow('Inward Unit Price',
+                          Formatters.formatCurrency(purchase.unitPurchasePrice)),
+                      _infoRow('Allocated from Batch',
+                          '$countInSale of ${widget.sale.serialNumbers.length} dispatched ($countInSale/${purchase.quantity} in Batch)'),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primaryBlue,
+                            side:
+                                const BorderSide(color: AppColors.primaryBlue),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          icon: const Icon(Icons.open_in_new, size: 16),
+                          label: const Text(
+                            'View Purchase Record',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    PurchaseDetailScreen(purchase: purchase),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 10),
+          ],
 
           // Allocated Physical Panels
           Row(
@@ -151,7 +390,7 @@ class SaleDetailScreen extends StatelessWidget {
                 ),
               ),
               Text(
-                '${sale.serialNumbers.length} dispatched',
+                '${widget.sale.serialNumbers.length} dispatched',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -162,38 +401,200 @@ class SaleDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Card(
+            clipBehavior: Clip.antiAlias,
             child: ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: sale.serialNumbers.length,
+              itemCount: widget.sale.serialNumbers.length,
               separatorBuilder: (_, index) =>
                   const Divider(height: 1, indent: 16, endIndent: 16),
               itemBuilder: (context, index) {
-                final sn = sale.serialNumbers[index];
-                return ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.check_circle,
-                      color: AppColors.solarGreenDark, size: 20),
-                  title: Text(
-                    sn,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  trailing: Container(
+                final sn = widget.sale.serialNumbers[index];
+                final panel = _panelsBySerial[sn];
+                PurchaseTransaction? purchase;
+                if (panel != null &&
+                    _purchasesById.containsKey(panel.purchaseId)) {
+                  purchase = _purchasesById[panel.purchaseId];
+                } else {
+                  purchase = _purchasesById.values.where((p) {
+                    return p.serialNumbers.contains(sn) ||
+                        (panel != null && p.batchNumber == panel.batchNumber);
+                  }).firstOrNull;
+                }
+
+                final batchNum = panel?.batchNumber ?? purchase?.batchNumber;
+                final inwardPrice =
+                    panel?.purchasePrice ?? purchase?.unitPurchasePrice;
+
+                return InkWell(
+                  onTap: purchase != null
+                      ? () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  PurchaseDetailScreen(purchase: purchase!),
+                            ),
+                          );
+                        }
+                      : null,
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.solarGreenLight,
-                      borderRadius: BorderRadius.circular(4),
+                        horizontal: 16, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle,
+                                color: AppColors.solarGreenDark, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                sn,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: AppColors.textMain,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.solarGreenLight,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Dispatched',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.solarGreenDark,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              // Batch
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryBlueLight,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.layers_outlined,
+                                        size: 13,
+                                        color: AppColors.primaryBlue),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Batch: ${batchNum ?? 'N/A'}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primaryBlue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Inward / Purchase Price
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.arrow_downward_rounded,
+                                        size: 12,
+                                        color: AppColors.textSecondary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Inward: ${inwardPrice != null ? Formatters.formatCurrency(inwardPrice) : 'N/A'}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textMain,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Selling Price
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.solarGreenLight
+                                      .withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.arrow_upward_rounded,
+                                        size: 12,
+                                        color: AppColors.solarGreenDark),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Sale: ${Formatters.formatCurrency(widget.sale.unitSellingPrice)}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.solarGreenDark,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (purchase != null) ...[
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 30),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.receipt_long_outlined,
+                                    size: 13, color: AppColors.primaryBlue),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'View Inward Purchase (${purchase.batchNumber})',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                const Icon(Icons.chevron_right,
+                                    size: 13, color: AppColors.primaryBlue),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    child: const Text('Dispatched',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.solarGreenDark)),
                   ),
                 );
               },

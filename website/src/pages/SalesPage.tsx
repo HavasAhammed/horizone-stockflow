@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Search,
   Plus,
@@ -14,12 +14,13 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import type { SaleTransaction, Customer, PanelItem, StockByWattage } from '../types';
+import type { SaleTransaction, Customer, PanelItem, StockByWattage, PurchaseTransaction } from '../types';
 import { Modal } from '../components/Modal';
 import { Badge } from '../components/Badge';
 import { SaleBarcodeScannerModal } from '../components/SaleBarcodeScannerModal';
 
 export const SalesPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [sales, setSales] = useState<SaleTransaction[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -40,6 +41,7 @@ export const SalesPage: React.FC = () => {
   // Available panels for selected wattage
   const [availablePanels, setAvailablePanels] = useState<PanelItem[]>([]);
   const [allPanels, setAllPanels] = useState<PanelItem[]>([]);
+  const [purchases, setPurchases] = useState<PurchaseTransaction[]>([]);
   const [loadingPanels, setLoadingPanels] = useState(false);
 
   // Barcode scanner & search states for sales
@@ -86,7 +88,7 @@ export const SalesPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const [salesData, custData, stockData, invData] = await Promise.all([
+      const [salesData, custData, stockData, invData, purchasesData] = await Promise.all([
         apiService.getSales({
           search,
           wattage: wattageFilter ? Number(wattageFilter) : undefined,
@@ -94,11 +96,13 @@ export const SalesPage: React.FC = () => {
         apiService.getCustomers(),
         apiService.getStockByWattage(),
         apiService.getInventory(),
+        apiService.getPurchases(),
       ]);
       setSales(salesData);
       setCustomers(custData);
       setStockByWattage(stockData);
       setAllPanels(invData);
+      setPurchases(purchasesData);
       if (custData.length > 0 && !formData.customerId) {
         setFormData((prev) => ({ ...prev, customerId: custData[0].id }));
       }
@@ -1007,16 +1011,233 @@ export const SalesPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Associated Purchases */}
+          {(() => {
+            const linkedPurchases = purchases.filter((p) =>
+              viewSale.serialNumbers.some((sn) => {
+                const panel = allPanels.find((item) => item.serialNumber === sn);
+                return (
+                  p.id === panel?.purchaseId ||
+                  p.batchNumber === panel?.batchNumber ||
+                  p.serialNumbers.includes(sn)
+                );
+              })
+            );
+
+            if (linkedPurchases.length === 0) return null;
+
+            return (
+              <div style={{ marginBottom: '16px' }}>
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    display: 'block',
+                    marginBottom: '8px',
+                  }}
+                >
+                  Source Inward Purchase ({linkedPurchases.length}{' '}
+                  {linkedPurchases.length === 1 ? 'batch' : 'batches'}):
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {linkedPurchases.map((purchase) => {
+                    const countInSale = viewSale.serialNumbers.filter((sn) => {
+                      const panel = allPanels.find((item) => item.serialNumber === sn);
+                      return (
+                        purchase.id === panel?.purchaseId ||
+                        purchase.batchNumber === panel?.batchNumber ||
+                        purchase.serialNumbers.includes(sn)
+                      );
+                    }).length;
+
+                    return (
+                      <div
+                        key={purchase.id}
+                        style={{
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '8px',
+                          padding: '12px',
+                          backgroundColor: 'var(--bg-light, #f8fafc)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '8px',
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '4px',
+                            }}
+                          >
+                            <strong style={{ fontSize: '0.9rem' }}>
+                              Batch: {purchase.batchNumber}
+                            </strong>
+                            <Badge variant="info">{purchase.wattage}W</Badge>
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {purchase.supplierName ? `${purchase.supplierName} • ` : ''}
+                            {new Date(purchase.purchaseDate).toLocaleDateString('en-IN')} • Inward Unit Price:{' '}
+                            <strong style={{ color: 'var(--text-main)' }}>
+                              {formatCurrency(purchase.unitPurchasePrice)}
+                            </strong>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              color: 'var(--text-muted)',
+                              marginTop: '2px',
+                            }}
+                          >
+                            Allocated: {countInSale} of {viewSale.serialNumbers.length} dispatched
+                            ({countInSale}/{purchase.quantity} in batch)
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                          onClick={() => {
+                            setViewSale(null);
+                            navigate(
+                              `/purchases?search=${encodeURIComponent(purchase.batchNumber)}`
+                            );
+                          }}
+                        >
+                          View Inward Purchase ↗
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{ marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+            <span
+              style={{
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                display: 'block',
+                marginBottom: '8px',
+              }}
+            >
               Allocated Serial Numbers ({viewSale.serialNumbers.length}):
             </span>
-            <div className="serial-chips-grid">
-              {viewSale.serialNumbers.map((sn) => (
-                <span key={sn} className="serial-chip selected">
-                  {sn}
-                </span>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {viewSale.serialNumbers.map((sn) => {
+                const panel = allPanels.find((p) => p.serialNumber === sn);
+                const purchase = purchases.find(
+                  (p) =>
+                    p.id === panel?.purchaseId ||
+                    p.batchNumber === panel?.batchNumber ||
+                    p.serialNumbers.includes(sn)
+                );
+                const batchNum = panel?.batchNumber || purchase?.batchNumber;
+                const inwardPrice = panel?.purchasePrice ?? purchase?.unitPurchasePrice;
+
+                return (
+                  <div
+                    key={sn}
+                    style={{
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      backgroundColor: 'var(--bg-white, #ffffff)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          fontSize: '0.88rem',
+                        }}
+                      >
+                        {sn}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Batch: {batchNum || 'N/A'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: '#f1f5f9',
+                          color: '#475569',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Inward: {inwardPrice != null ? formatCurrency(inwardPrice) : 'N/A'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: '#dcfce7',
+                          color: '#15803d',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Sale: {formatCurrency(viewSale.unitSellingPrice)}
+                      </span>
+                    </div>
+                    {purchase && (
+                      <button
+                        type="button"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--color-primary)',
+                          fontSize: '0.8rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 6px',
+                        }}
+                        onClick={() => {
+                          setViewSale(null);
+                          navigate(
+                            `/purchases?search=${encodeURIComponent(purchase.batchNumber)}`
+                          );
+                        }}
+                      >
+                        View Purchase ↗
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
