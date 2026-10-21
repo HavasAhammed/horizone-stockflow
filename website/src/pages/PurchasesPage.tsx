@@ -40,6 +40,7 @@ export const PurchasesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [viewPurchase, setViewPurchase] = useState<PurchaseTransaction | null>(null);
   const [editPurchase, setEditPurchase] = useState<PurchaseTransaction | null>(null);
+  const [newSerialInEdit, setNewSerialInEdit] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   // Barcode scanner & individual serials state
@@ -271,6 +272,42 @@ export const PurchasesPage: React.FC = () => {
     }
   };
 
+  const handleAddSerialToEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editPurchase || !newSerialInEdit.trim()) return;
+    const sn = newSerialInEdit.trim().toUpperCase();
+    if (editPurchase.serialNumbers.some((s) => s.toUpperCase() === sn)) {
+      setError(`Serial "${sn}" already exists in this batch.`);
+      return;
+    }
+    if (existingInventorySerials.has(sn)) {
+      setError(`Serial "${sn}" already exists in inventory.`);
+      return;
+    }
+    setError(null);
+    setEditPurchase({
+      ...editPurchase,
+      serialNumbers: [...editPurchase.serialNumbers, sn],
+      quantity: editPurchase.serialNumbers.length + 1,
+    });
+    setNewSerialInEdit('');
+  };
+
+  const handleRemoveSerialFromEdit = (index: number) => {
+    if (!editPurchase) return;
+    if (editPurchase.serialNumbers.length <= 1) {
+      setError('A batch purchase must contain at least one panel serial number.');
+      return;
+    }
+    setError(null);
+    const updated = editPurchase.serialNumbers.filter((_, i) => i !== index);
+    setEditPurchase({
+      ...editPurchase,
+      serialNumbers: updated,
+      quantity: updated.length,
+    });
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editPurchase) return;
@@ -280,9 +317,10 @@ export const PurchasesPage: React.FC = () => {
         batchNumber: editPurchase.batchNumber,
         unitPurchasePrice: Number(editPurchase.unitPurchasePrice),
         notes: editPurchase.notes,
+        serialNumbers: editPurchase.serialNumbers,
       });
       setEditPurchase(null);
-      setSuccessMsg('Purchase updated successfully.');
+      setSuccessMsg('Purchase and panel serials updated successfully.');
       loadPurchases();
     } catch (err: any) {
       setError(err.message || 'Failed to update purchase');
@@ -1212,6 +1250,96 @@ export const PurchasesPage: React.FC = () => {
                   setEditPurchase({ ...editPurchase, notes: e.target.value })
                 }
               />
+            </div>
+
+            {/* Panels Management within Batch */}
+            <div style={{ marginTop: '20px', marginBottom: '20px', borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>
+                    Panels in Batch ({editPurchase.serialNumbers.length})
+                  </h4>
+                  <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+                    Total Amount: ₹{((editPurchase.serialNumbers.length) * Number(editPurchase.unitPurchasePrice)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick Add Serial Input */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                <input
+                  type="text"
+                  placeholder="Enter serial number to add to this batch..."
+                  className="form-input"
+                  style={{ textTransform: 'uppercase' }}
+                  value={newSerialInEdit}
+                  onChange={(e) => setNewSerialInEdit(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddSerialToEdit(e);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleAddSerialToEdit}
+                  disabled={!newSerialInEdit.trim()}
+                >
+                  <Plus size={14} style={{ marginRight: '4px' }} /> Add
+                </button>
+              </div>
+
+              {/* Serial List */}
+              <div
+                style={{
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  padding: '8px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  backgroundColor: 'var(--color-bg)',
+                }}
+              >
+                {editPurchase.serialNumbers.map((sn, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      backgroundColor: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      fontSize: '12px',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    <span>{sn}</span>
+                    <button
+                      type="button"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        color: 'var(--color-danger)',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                      title="Remove panel from batch"
+                      onClick={() => handleRemoveSerialFromEdit(idx)}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>

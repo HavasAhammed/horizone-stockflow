@@ -284,5 +284,97 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
+
+    test('allows adding more panels to a batch later', () async {
+      final purchase = await service.createPurchase(
+        batchNumber: 'BATCH-APPEND',
+        wattage: 540,
+        quantity: 1,
+        serialNumbers: ['HZ-APPEND-01'],
+        unitPurchasePrice: 10000,
+      );
+
+      final updated = await service.addPanelsToPurchase(
+        purchase.id,
+        ['HZ-APPEND-02', 'HZ-APPEND-03'],
+      );
+
+      expect(updated.quantity, 3);
+      expect(updated.totalPurchaseAmount, 30000);
+      expect(updated.serialNumbers, ['HZ-APPEND-01', 'HZ-APPEND-02', 'HZ-APPEND-03']);
+
+      final p3 = await panelRepo.getPanelBySerialNumber('HZ-APPEND-03');
+      expect(p3, isNotNull);
+      expect(p3!.batchNumber, 'BATCH-APPEND');
+      expect(p3.wattage, 540);
+      expect(p3.isAvailable, true);
+    });
+
+    test('allows updating/renaming an existing panel serial number', () async {
+      final purchase = await service.createPurchase(
+        batchNumber: 'BATCH-RENAME',
+        wattage: 400,
+        quantity: 1,
+        serialNumbers: ['HZ-WRONG-SN'],
+        unitPurchasePrice: 8500,
+      );
+
+      final updated = await service.updatePanelSerialNumber(
+        purchase.id,
+        'HZ-WRONG-SN',
+        'HZ-CORRECT-SN',
+      );
+
+      expect(updated.serialNumbers, contains('HZ-CORRECT-SN'));
+      expect(updated.serialNumbers, isNot(contains('HZ-WRONG-SN')));
+
+      final oldPanel = await panelRepo.getPanelBySerialNumber('HZ-WRONG-SN');
+      expect(oldPanel, isNull);
+
+      final newPanel = await panelRepo.getPanelBySerialNumber('HZ-CORRECT-SN');
+      expect(newPanel, isNotNull);
+      expect(newPanel!.batchNumber, 'BATCH-RENAME');
+    });
+
+    test('reconciles panels when a sale is updated with new serials', () async {
+      final cust = await service.createCustomer(
+        consumerNumber: '1155000000999',
+        phone: '9847099999',
+      );
+
+      await service.createPurchase(
+        batchNumber: 'BATCH-SALE-UPD',
+        wattage: 540,
+        quantity: 3,
+        serialNumbers: ['HZ-SALEUPD-1', 'HZ-SALEUPD-2', 'HZ-SALEUPD-3'],
+        unitPurchasePrice: 10000,
+      );
+
+      final sale = await service.createSale(
+        customerId: cust.id,
+        panelWattage: 540,
+        serialNumbers: ['HZ-SALEUPD-1', 'HZ-SALEUPD-2'],
+        unitSellingPrice: 14000,
+      );
+
+      // Update sale: drop HZ-SALEUPD-2, add HZ-SALEUPD-3
+      final updatedSale = await service.updateSale(
+        id: sale.id,
+        serialNumbers: ['HZ-SALEUPD-1', 'HZ-SALEUPD-3'],
+        unitSellingPrice: 14500,
+      );
+
+      expect(updatedSale.quantity, 2);
+      expect(updatedSale.totalSellingAmount, 29000);
+      expect(updatedSale.serialNumbers, ['HZ-SALEUPD-1', 'HZ-SALEUPD-3']);
+
+      final p2 = await panelRepo.getPanelBySerialNumber('HZ-SALEUPD-2');
+      expect(p2!.isAvailable, true);
+      expect(p2.saleId, isNull);
+
+      final p3 = await panelRepo.getPanelBySerialNumber('HZ-SALEUPD-3');
+      expect(p3!.isSold, true);
+      expect(p3.saleId, sale.id);
+    });
   });
 }

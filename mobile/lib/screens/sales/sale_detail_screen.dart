@@ -10,6 +10,7 @@ import '../../providers/inventory_provider.dart';
 import '../../widgets/confirmation_dialog.dart';
 import '../../utils/formatters.dart';
 import '../purchase/purchase_detail_screen.dart';
+import 'edit_sale_screen.dart';
 
 class SaleDetailScreen extends StatefulWidget {
   final SaleTransaction sale;
@@ -21,6 +22,7 @@ class SaleDetailScreen extends StatefulWidget {
 }
 
 class _SaleDetailScreenState extends State<SaleDetailScreen> {
+  late SaleTransaction _sale;
   Map<String, PanelItem> _panelsBySerial = {};
   Map<String, PurchaseTransaction> _purchasesById = {};
   bool _isLoadingDetails = true;
@@ -28,6 +30,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _sale = widget.sale;
     _loadPanelAndPurchaseDetails();
   }
 
@@ -37,10 +40,21 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           context.read<InventoryProvider>().inventoryService;
       final allPurchases =
           await inventoryService.purchaseRepository.getAllPurchases();
+      if (!mounted) return;
+      final allSales = context.read<SaleProvider>().allSales;
+      final current = allSales.cast<SaleTransaction?>().firstWhere(
+            (s) => s?.id == _sale.id,
+            orElse: () => null,
+          );
+
+      if (current != null) {
+        _sale = current;
+      }
+
       final panelsMap = <String, PanelItem>{};
       final purchasesMap = <String, PurchaseTransaction>{};
 
-      for (final sn in widget.sale.serialNumbers) {
+      for (final sn in _sale.serialNumbers) {
         var panel =
             await inventoryService.panelRepository.getPanelBySerialNumber(sn);
         PurchaseTransaction? purchase;
@@ -69,7 +83,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               purchaseId: purchase.id,
               purchasePrice: purchase.unitPurchasePrice,
               status: PanelStatus.sold,
-              saleId: widget.sale.id,
+              saleId: _sale.id,
             );
             panelsMap[sn] = syntheticPanel;
           }
@@ -103,6 +117,20 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         title: const Text('Sale Transaction Details'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit Sale & Dispatched Panels',
+            onPressed: () async {
+              final updated = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => EditSaleScreen(sale: _sale),
+                ),
+              );
+              if (updated == true && mounted) {
+                await _loadPanelAndPurchaseDetails();
+              }
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_outline, color: AppColors.danger),
             tooltip: 'Cancel & Reconcile Sale',
             onPressed: () async {
@@ -110,14 +138,14 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 context: context,
                 title: 'Cancel Sale & Return Panels?',
                 message:
-                    'All ${widget.sale.serialNumbers.length} allocated solar panel(s) will be returned to available inventory immediately.',
+                    'All ${_sale.serialNumbers.length} allocated solar panel(s) will be returned to available inventory immediately.',
                 confirmText: 'Cancel Sale & Restore Stock',
                 isDestructive: true,
               );
 
               if (confirmed && context.mounted) {
                 try {
-                  await context.read<SaleProvider>().deleteSale(widget.sale.id);
+                  await context.read<SaleProvider>().deleteSale(_sale.id);
                   if (context.mounted) {
                     context.read<DashboardProvider>().loadDashboard();
                     context.read<InventoryProvider>().loadPanels();
@@ -172,7 +200,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.sale.customerName ?? 'Customer',
+                              _sale.customerName ?? 'Customer',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -180,7 +208,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                               ),
                             ),
                             Text(
-                              'KSEB Consumer #: ${widget.sale.consumerNumber}',
+                              'KSEB Consumer #: ${_sale.consumerNumber}',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontFamily: 'monospace',
@@ -195,19 +223,19 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                   ),
                   const Divider(height: 24),
                   _infoRow(
-                      'Sale Date', Formatters.formatDate(widget.sale.saleDate)),
-                  _infoRow('Panel Wattage', '${widget.sale.panelWattage}W'),
+                      'Sale Date', Formatters.formatDate(_sale.saleDate)),
+                  _infoRow('Panel Wattage', '${_sale.panelWattage}W'),
                   _infoRow('Dispatched Quantity',
-                      '${widget.sale.quantity} Panels'),
+                      '${_sale.quantity} Panels'),
                   _infoRow('Unit Selling Price',
-                      Formatters.formatCurrency(widget.sale.unitSellingPrice)),
+                      Formatters.formatCurrency(_sale.unitSellingPrice)),
                   _infoRow(
                     'Total Selling Amount',
-                    Formatters.formatCurrency(widget.sale.totalSellingAmount),
+                    Formatters.formatCurrency(_sale.totalSellingAmount),
                     isBold: true,
                     valueColor: AppColors.solarGreenDark,
                   ),
-                  if (widget.sale.notes != null) ...[
+                  if (_sale.notes != null) ...[
                     const Divider(height: 24),
                     const Text('Notes',
                         style: TextStyle(
@@ -215,7 +243,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                             fontWeight: FontWeight.w600,
                             color: AppColors.textSecondary)),
                     const SizedBox(height: 4),
-                    Text(widget.sale.notes!,
+                    Text(_sale.notes!,
                         style: const TextStyle(fontSize: 13)),
                   ],
                 ],
@@ -260,7 +288,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             ),
             const SizedBox(height: 10),
             ..._purchasesById.values.map((purchase) {
-              final countInSale = widget.sale.serialNumbers.where((sn) {
+              final countInSale = _sale.serialNumbers.where((sn) {
                 final p = _panelsBySerial[sn];
                 return p?.purchaseId == purchase.id ||
                     p?.batchNumber == purchase.batchNumber ||
@@ -337,7 +365,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                       _infoRow('Inward Unit Price',
                           Formatters.formatCurrency(purchase.unitPurchasePrice)),
                       _infoRow('Allocated from Batch',
-                          '$countInSale of ${widget.sale.serialNumbers.length} dispatched ($countInSale/${purchase.quantity} in Batch)'),
+                          '$countInSale of ${_sale.serialNumbers.length} dispatched ($countInSale/${purchase.quantity} in Batch)'),
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
@@ -390,7 +418,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 ),
               ),
               Text(
-                '${widget.sale.serialNumbers.length} dispatched',
+                '${_sale.serialNumbers.length} dispatched',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -405,11 +433,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             child: ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: widget.sale.serialNumbers.length,
+              itemCount: _sale.serialNumbers.length,
               separatorBuilder: (_, index) =>
                   const Divider(height: 1, indent: 16, endIndent: 16),
               itemBuilder: (context, index) {
-                final sn = widget.sale.serialNumbers[index];
+                final sn = _sale.serialNumbers[index];
                 final panel = _panelsBySerial[sn];
                 PurchaseTransaction? purchase;
                 if (panel != null &&
@@ -556,7 +584,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                                         color: AppColors.solarGreenDark),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Sale: ${Formatters.formatCurrency(widget.sale.unitSellingPrice)}',
+                                      'Sale: ${Formatters.formatCurrency(_sale.unitSellingPrice)}',
                                       style: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -611,16 +639,21 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label,
               style: const TextStyle(
                   fontSize: 13, color: AppColors.textSecondary)),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
-              color: valueColor ?? AppColors.textMain,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+                color: valueColor ?? AppColors.textMain,
+              ),
             ),
           ),
         ],

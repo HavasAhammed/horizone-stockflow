@@ -5,6 +5,9 @@ import {
   createPurchase,
   updatePurchase,
   deletePurchase,
+  addPanelsToPurchase,
+  updatePanelSerial,
+  deletePanelFromPurchase,
 } from '../controllers/purchaseController.js';
 
 const router = Router();
@@ -17,5 +20,12 @@ router.route('/:id')
   .get(getPurchaseById)
   .put(updatePurchase)
   .delete(deletePurchase);
+
+router.route('/:id/panels')
+  .post(addPanelsToPurchase);
+
+router.route('/:id/panels/:serial')
+  .put(updatePanelSerial)
+  .delete(deletePanelFromPurchase);
 
 export default router;

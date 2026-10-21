@@ -195,6 +195,53 @@ class ApiService {
     return PurchaseTransaction.fromMap(data);
   }
 
+  Future<PurchaseTransaction> updatePurchase(
+    String id, {
+    DateTime? purchaseDate,
+    String? supplierName,
+    String? batchNumber,
+    double? unitPurchasePrice,
+    String? notes,
+    List<String>? serialNumbers,
+  }) async {
+    final payload = jsonEncode({
+      if (purchaseDate != null) 'purchaseDate': purchaseDate.toIso8601String(),
+      if (supplierName != null && supplierName.trim().isNotEmpty) 'supplierName': supplierName.trim(),
+      if (batchNumber != null && batchNumber.trim().isNotEmpty) 'batchNumber': batchNumber.trim(),
+      'unitPurchasePrice': ?unitPurchasePrice,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      'serialNumbers': ?serialNumbers,
+    });
+
+    final res = await _client.put(_uri('/purchases/$id'), headers: _headers, body: payload).timeout(_timeout);
+    final data = _handleResponse(res) as Map;
+    return PurchaseTransaction.fromMap(data);
+  }
+
+  Future<PurchaseTransaction> addPanelsToPurchase(String id, List<String> serialNumbers) async {
+    final payload = jsonEncode({
+      'serialNumbers': serialNumbers,
+    });
+    final res = await _client.post(_uri('/purchases/$id/panels'), headers: _headers, body: payload).timeout(_timeout);
+    final data = _handleResponse(res) as Map;
+    return PurchaseTransaction.fromMap(data);
+  }
+
+  Future<PurchaseTransaction> updatePanelSerial(String id, String oldSerial, String newSerial) async {
+    final payload = jsonEncode({
+      'newSerialNumber': newSerial.trim().toUpperCase(),
+    });
+    final res = await _client.put(_uri('/purchases/$id/panels/$oldSerial'), headers: _headers, body: payload).timeout(_timeout);
+    final data = _handleResponse(res) as Map;
+    return PurchaseTransaction.fromMap(data);
+  }
+
+  Future<PurchaseTransaction> deletePanelFromPurchase(String id, String serial) async {
+    final res = await _client.delete(_uri('/purchases/$id/panels/$serial'), headers: _headers).timeout(_timeout);
+    final data = _handleResponse(res) as Map;
+    return PurchaseTransaction.fromMap(data);
+  }
+
   Future<void> deletePurchase(String id) async {
     final res = await _client.delete(_uri('/purchases/$id'), headers: _headers).timeout(_timeout);
     _handleResponse(res);
@@ -242,6 +289,27 @@ class ApiService {
     });
 
     final res = await _client.post(_uri('/sales'), headers: _headers, body: payload).timeout(_timeout);
+    final data = _handleResponse(res) as Map;
+    return SaleTransaction.fromMap(data);
+  }
+
+  Future<SaleTransaction> updateSale(
+    String id, {
+    DateTime? saleDate,
+    String? customerId,
+    double? unitSellingPrice,
+    List<String>? serialNumbers,
+    String? notes,
+  }) async {
+    final payload = jsonEncode({
+      if (saleDate != null) 'saleDate': saleDate.toIso8601String(),
+      'customerId': ?customerId,
+      'unitSellingPrice': ?unitSellingPrice,
+      'serialNumbers': ?serialNumbers,
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    });
+
+    final res = await _client.put(_uri('/sales/$id'), headers: _headers, body: payload).timeout(_timeout);
     final data = _handleResponse(res) as Map;
     return SaleTransaction.fromMap(data);
   }

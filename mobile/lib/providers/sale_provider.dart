@@ -96,6 +96,26 @@ class SaleProvider extends ChangeNotifier {
     return s;
   }
 
+  Future<SaleTransaction> updateSale({
+    required String id,
+    DateTime? saleDate,
+    String? customerId,
+    double? unitSellingPrice,
+    List<String>? serialNumbers,
+    String? notes,
+  }) async {
+    final updated = await inventoryService.updateSale(
+      id: id,
+      saleDate: saleDate,
+      customerId: customerId,
+      unitSellingPrice: unitSellingPrice,
+      serialNumbers: serialNumbers,
+      notes: notes,
+    );
+    await loadSales();
+    return updated;
+  }
+
   Future<void> deleteSale(String id) async {
     await inventoryService.deleteSale(id);
     await loadSales();

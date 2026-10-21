@@ -69,6 +69,61 @@ export const updatePurchase = (req: Request, res: Response, next: NextFunction) 
   }
 };
 
+export const addPanelsToPurchase = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = String(req.params.id);
+    const { serialNumbers } = req.body;
+    if (!Array.isArray(serialNumbers) || serialNumbers.length === 0) {
+      return res.status(400).json({ success: false, error: 'serialNumbers array is required.' });
+    }
+    const purchase = dataService.addPanelsToPurchase(id, serialNumbers);
+    res.json({
+      success: true,
+      message: `${serialNumbers.length} panel(s) added to batch "${purchase.batchNumber}" successfully`,
+      data: purchase,
+    });
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+export const updatePanelSerial = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = String(req.params.id);
+    const oldSerial = String(req.params.serial);
+    const { newSerialNumber } = req.body;
+    if (!newSerialNumber || typeof newSerialNumber !== 'string') {
+      return res.status(400).json({ success: false, error: 'newSerialNumber is required.' });
+    }
+    const purchase = dataService.updatePanelSerial(id, oldSerial, newSerialNumber);
+    res.json({
+      success: true,
+      message: `Panel "${oldSerial}" renamed to "${newSerialNumber}" successfully`,
+      data: purchase,
+    });
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
+export const deletePanelFromPurchase = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = String(req.params.id);
+    const serial = String(req.params.serial);
+    const purchase = dataService.deletePanelFromPurchase(id, serial);
+    res.json({
+      success: true,
+      message: `Panel "${serial}" removed from purchase batch "${purchase.batchNumber}" successfully`,
+      data: purchase,
+    });
+  } catch (error: any) {
+    const status = error.message?.includes('not found') ? 404 : 400;
+    res.status(status).json({ success: false, error: error.message });
+  }
+};
+
 export const deletePurchase = (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);

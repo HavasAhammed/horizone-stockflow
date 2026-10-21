@@ -4,6 +4,7 @@ import {
   Search,
   Plus,
   Trash2,
+  Edit,
   Eye,
   AlertCircle,
   CheckCircle2,
@@ -36,7 +37,17 @@ export const SalesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [viewSale, setViewSale] = useState<SaleTransaction | null>(null);
+  const [editSale, setEditSale] = useState<SaleTransaction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editSaleFormData, setEditSaleFormData] = useState({
+    customerId: '',
+    saleDate: '',
+    unitSellingPrice: 0,
+    notes: '',
+    selectedSerials: [] as string[],
+  });
+  const [editSalePanels, setEditSalePanels] = useState<PanelItem[]>([]);
+  const [editSaleSearch, setEditSaleSearch] = useState('');
 
   // Available panels for selected wattage
   const [availablePanels, setAvailablePanels] = useState<PanelItem[]>([]);
@@ -289,6 +300,71 @@ export const SalesPage: React.FC = () => {
     }
   };
 
+  const handleOpenEditSale = async (s: SaleTransaction) => {
+    setEditSale(s);
+    setEditSaleFormData({
+      customerId: s.customerId,
+      saleDate: s.saleDate ? s.saleDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      unitSellingPrice: s.unitSellingPrice,
+      notes: s.notes || '',
+      selectedSerials: [...s.serialNumbers],
+    });
+    setEditSaleSearch('');
+    try {
+      const avail = await apiService.getAvailablePanelsByWattage(s.panelWattage);
+      const currentSalePanels = allPanels.filter((p) => s.serialNumbers.includes(p.serialNumber));
+      const map = new Map<string, PanelItem>();
+      currentSalePanels.forEach((p) => map.set(p.serialNumber, p));
+      avail.forEach((p) => map.set(p.serialNumber, p));
+      setEditSalePanels(Array.from(map.values()));
+    } catch {
+      const currentSalePanels = allPanels.filter((p) => s.serialNumbers.includes(p.serialNumber));
+      setEditSalePanels(currentSalePanels);
+    }
+  };
+
+  const handleToggleEditSaleSerial = (sn: string) => {
+    setEditSaleFormData((prev) => {
+      const exists = prev.selectedSerials.includes(sn);
+      return {
+        ...prev,
+        selectedSerials: exists
+          ? prev.selectedSerials.filter((s) => s !== sn)
+          : [...prev.selectedSerials, sn],
+      };
+    });
+  };
+
+  const handleEditSaleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editSale) return;
+
+    if (!editSaleFormData.customerId) {
+      setError('Please select a customer.');
+      return;
+    }
+    if (editSaleFormData.selectedSerials.length === 0) {
+      setError('Please select at least one solar panel to dispatch.');
+      return;
+    }
+
+    try {
+      await apiService.updateSale(editSale.id, {
+        customerId: editSaleFormData.customerId,
+        saleDate: new Date(editSaleFormData.saleDate).toISOString(),
+        unitSellingPrice: Number(editSaleFormData.unitSellingPrice),
+        notes: editSaleFormData.notes.trim() || undefined,
+        serialNumbers: editSaleFormData.selectedSerials,
+      });
+
+      setEditSale(null);
+      setSuccessMsg('Sale updated successfully and panels reconciled!');
+      loadData();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update sale');
+    }
+  };
+
   const formatCurrency = (amt: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -509,6 +585,14 @@ export const SalesPage: React.FC = () => {
                           title="View Sale Details & Allocated Panels"
                         >
                           <Eye size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleOpenEditSale(s)}
+                          title="Edit Sale & Dispatched Panels"
+                        >
+                          <Edit size={14} />
                         </button>
                         <button
                           type="button"
@@ -1292,6 +1376,172 @@ export const SalesPage: React.FC = () => {
               Confirm Deletion & Restore Panels
             </button>
           </div>
+        </Modal>
+      )}
+
+      {/* Edit Sale Modal */}
+      {editSale && (
+        <Modal
+          isOpen={true}
+          onClose={() => setEditSale(null)}
+          title={`Edit Sale: ${editSale.customerName || editSale.consumerNumber}`}
+        >
+          <form onSubmit={handleEditSaleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Customer</label>
+              <select
+                className="form-input"
+                required
+                value={editSaleFormData.customerId}
+                onChange={(e) =>
+                  setEditSaleFormData({ ...editSaleFormData, customerId: e.target.value })
+                }
+              >
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name ? `${c.name} (${c.consumerNumber})` : `${c.consumerNumber} - ${c.phone}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Sale Date</label>
+                <input
+                  type="date"
+                  required
+                  className="form-input"
+                  value={editSaleFormData.saleDate}
+                  onChange={(e) =>
+                    setEditSaleFormData({ ...editSaleFormData, saleDate: e.target.value })
+                  }
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Unit Selling Price (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="50"
+                  required
+                  className="form-input"
+                  value={editSaleFormData.unitSellingPrice}
+                  onChange={(e) =>
+                    setEditSaleFormData({
+                      ...editSaleFormData,
+                      unitSellingPrice: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Notes</label>
+              <input
+                type="text"
+                className="form-input"
+                value={editSaleFormData.notes}
+                onChange={(e) =>
+                  setEditSaleFormData({ ...editSaleFormData, notes: e.target.value })
+                }
+              />
+            </div>
+
+            {/* Panels Selection for Sale */}
+            <div style={{ marginTop: '16px', marginBottom: '16px', borderTop: '1px solid var(--color-border)', paddingTop: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700 }}>
+                  Select Panels ({editSaleFormData.selectedSerials.length} selected)
+                </span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-primary)' }}>
+                  Total: ₹{(editSaleFormData.selectedSerials.length * Number(editSaleFormData.unitSellingPrice)).toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Filter serials or batch number..."
+                className="form-input"
+                style={{ marginBottom: '8px', fontSize: '12px', padding: '6px 10px' }}
+                value={editSaleSearch}
+                onChange={(e) => setEditSaleSearch(e.target.value)}
+              />
+
+              <div
+                style={{
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '6px',
+                  padding: '6px',
+                  backgroundColor: 'var(--color-bg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                }}
+              >
+                {editSalePanels
+                  .filter((p) => {
+                    if (!editSaleSearch.trim()) return true;
+                    const q = editSaleSearch.toLowerCase();
+                    return p.serialNumber.toLowerCase().includes(q) || p.batchNumber.toLowerCase().includes(q);
+                  })
+                  .map((p) => {
+                    const isSelected = editSaleFormData.selectedSerials.includes(p.serialNumber);
+                    return (
+                      <label
+                        key={p.serialNumber}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          backgroundColor: isSelected ? 'var(--color-primary-light)' : 'var(--color-surface)',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleEditSaleSerial(p.serialNumber)}
+                          />
+                          <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{p.serialNumber}</span>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: 'var(--color-bg)',
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          Batch: {p.batchNumber}
+                        </span>
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setEditSale(null)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Save Sale Changes
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

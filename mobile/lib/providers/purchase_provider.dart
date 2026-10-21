@@ -100,6 +100,63 @@ class PurchaseProvider extends ChangeNotifier {
     return p;
   }
 
+  Future<PurchaseTransaction> updatePurchase({
+    required String id,
+    DateTime? purchaseDate,
+    String? supplierName,
+    String? batchNumber,
+    double? unitPurchasePrice,
+    String? notes,
+    List<String>? serialNumbers,
+  }) async {
+    final updated = await inventoryService.updatePurchase(
+      id: id,
+      purchaseDate: purchaseDate,
+      supplierName: supplierName,
+      batchNumber: batchNumber,
+      unitPurchasePrice: unitPurchasePrice,
+      notes: notes,
+      serialNumbers: serialNumbers,
+    );
+    await loadPurchases();
+    return updated;
+  }
+
+  Future<PurchaseTransaction> addPanelsToPurchase(
+    String purchaseId,
+    List<String> newSerials,
+  ) async {
+    final updated = await inventoryService.addPanelsToPurchase(purchaseId, newSerials);
+    await loadPurchases();
+    return updated;
+  }
+
+  Future<PurchaseTransaction> updatePanelSerialNumber(
+    String purchaseId,
+    String oldSerial,
+    String newSerial,
+  ) async {
+    final updated = await inventoryService.updatePanelSerialNumber(
+      purchaseId,
+      oldSerial,
+      newSerial,
+    );
+    await loadPurchases();
+    return updated;
+  }
+
+  Future<PurchaseTransaction> deletePanelFromPurchase(
+    String purchaseId,
+    String serialNumber,
+  ) async {
+    final updated = await inventoryService.deletePanelFromPurchase(
+      purchaseId,
+      serialNumber,
+    );
+    await loadPurchases();
+    return updated;
+  }
+
   Future<void> deletePurchase(String id) async {
     await inventoryService.deletePurchase(id);
     await loadPurchases();

@@ -318,6 +318,278 @@ class InventoryService {
     return purchase;
   }
 
+  Future<PurchaseTransaction> updatePurchase({
+    required String id,
+    DateTime? purchaseDate,
+    String? supplierName,
+    String? batchNumber,
+    double? unitPurchasePrice,
+    String? notes,
+    List<String>? serialNumbers,
+  }) async {
+    if (await _shouldUseApi()) {
+      final updated = await apiService!.updatePurchase(
+        id,
+        purchaseDate: purchaseDate,
+        supplierName: supplierName,
+        batchNumber: batchNumber,
+        unitPurchasePrice: unitPurchasePrice,
+        notes: notes,
+        serialNumbers: serialNumbers,
+      );
+      await purchaseRepository.savePurchase(updated);
+
+      if (serialNumbers != null) {
+        final existing = await purchaseRepository.getPurchaseById(id);
+        if (existing != null) {
+          final removed = existing.serialNumbers.where((s) => !serialNumbers.contains(s)).toList();
+          if (removed.isNotEmpty) {
+            await panelRepository.deletePanels(removed);
+          }
+        }
+        final List<PanelItem> newPanels = serialNumbers.map((sn) {
+          return PanelItem(
+            id: sn,
+            serialNumber: sn,
+            batchNumber: updated.batchNumber,
+            wattage: updated.wattage,
+            purchaseId: updated.id,
+            purchasePrice: updated.unitPurchasePrice,
+            status: PanelStatus.available,
+            saleId: null,
+            createdAt: updated.purchaseDate,
+            updatedAt: DateTime.now(),
+          );
+        }).toList();
+        await panelRepository.savePanels(newPanels);
+      }
+      return updated;
+    }
+
+    final purchase = await purchaseRepository.getPurchaseById(id);
+    if (purchase == null) throw StateError('Purchase record "$id" not found.');
+
+    final trimmedBatch = batchNumber?.trim();
+    if (trimmedBatch != null && trimmedBatch.isEmpty) {
+      throw ArgumentError('Batch number cannot be empty.');
+    }
+    if (unitPurchasePrice != null && unitPurchasePrice < 0) {
+      throw ArgumentError('Unit purchase price cannot be negative.');
+    }
+
+    final newBatch = trimmedBatch ?? purchase.batchNumber;
+    final newPrice = unitPurchasePrice ?? purchase.unitPurchasePrice;
+    final newDate = purchaseDate ?? purchase.purchaseDate;
+    final newSupplier = supplierName != null
+        ? (supplierName.trim().isEmpty ? null : supplierName.trim())
+        : purchase.supplierName;
+    final newNotes = notes != null
+        ? (notes.trim().isEmpty ? null : notes.trim())
+        : purchase.notes;
+
+    List<String> finalSerials = purchase.serialNumbers;
+
+    if (serialNumbers != null) {
+      final clean = serialNumbers.map((s) => s.trim().toUpperCase()).where((s) => s.isNotEmpty).toList();
+      if (clean.isEmpty) {
+        throw ArgumentError('Purchase batch must contain at least one panel serial number.');
+      }
+      final uniqueSet = clean.toSet();
+      if (uniqueSet.length != clean.length) {
+        throw StateError('Duplicate serial numbers in updated batch list.');
+      }
+
+      final oldUpperSet = purchase.serialNumbers.map((s) => s.toUpperCase()).toSet();
+      final removed = purchase.serialNumbers.where((s) => !uniqueSet.contains(s.toUpperCase())).toList();
+      final added = clean.where((s) => !oldUpperSet.contains(s)).toList();
+
+      for (final sn in removed) {
+        final panel = await panelRepository.getPanelBySerialNumber(sn);
+        if (panel != null && panel.isSold) {
+          throw StateError('Cannot remove panel "$sn" because it has already been sold in sale "${panel.saleId}".');
+        }
+      }
+
+      for (final sn in added) {
+        final existing = await panelRepository.getPanelBySerialNumber(sn);
+        if (existing != null) {
+          throw StateError('Serial number "$sn" already exists in inventory.');
+        }
+      }
+
+      await panelRepository.deletePanels(removed);
+
+      final List<PanelItem> createdPanels = added.map((sn) {
+        return PanelItem(
+          id: _uuid.v4(),
+          serialNumber: sn,
+          batchNumber: newBatch,
+          wattage: purchase.wattage,
+          purchaseId: purchase.id,
+          purchasePrice: newPrice,
+          status: PanelStatus.available,
+          saleId: null,
+          createdAt: newDate,
+          updatedAt: DateTime.now(),
+        );
+      }).toList();
+      await panelRepository.savePanels(createdPanels);
+
+      finalSerials = clean;
+    }
+
+    // Update existing panels if batch number or price changed
+    if (newBatch != purchase.batchNumber || newPrice != purchase.unitPurchasePrice) {
+      for (final sn in finalSerials) {
+        final p = await panelRepository.getPanelBySerialNumber(sn);
+        if (p != null) {
+          await panelRepository.savePanel(p.copyWith(
+            batchNumber: newBatch,
+            purchasePrice: newPrice,
+            updatedAt: DateTime.now(),
+          ));
+        }
+      }
+    }
+
+    final updated = purchase.copyWith(
+      purchaseDate: newDate,
+      supplierName: newSupplier,
+      batchNumber: newBatch,
+      quantity: finalSerials.length,
+      serialNumbers: finalSerials,
+      unitPurchasePrice: newPrice,
+      totalPurchaseAmount: finalSerials.length * newPrice,
+      notes: newNotes,
+      updatedAt: DateTime.now(),
+    );
+
+    await purchaseRepository.savePurchase(updated);
+    return updated;
+  }
+
+  Future<PurchaseTransaction> addPanelsToPurchase(String purchaseId, List<String> newSerials) async {
+    final clean = newSerials.map((s) => s.trim().toUpperCase()).where((s) => s.isNotEmpty).toList();
+    if (clean.isEmpty) {
+      throw ArgumentError('At least one serial number is required.');
+    }
+
+    if (await _shouldUseApi()) {
+      final updated = await apiService!.addPanelsToPurchase(purchaseId, clean);
+      await purchaseRepository.savePurchase(updated);
+      final List<PanelItem> newPanels = clean.map((sn) {
+        return PanelItem(
+          id: sn,
+          serialNumber: sn,
+          batchNumber: updated.batchNumber,
+          wattage: updated.wattage,
+          purchaseId: updated.id,
+          purchasePrice: updated.unitPurchasePrice,
+          status: PanelStatus.available,
+          saleId: null,
+          createdAt: updated.purchaseDate,
+          updatedAt: DateTime.now(),
+        );
+      }).toList();
+      await panelRepository.savePanels(newPanels);
+      return updated;
+    }
+
+    final purchase = await purchaseRepository.getPurchaseById(purchaseId);
+    if (purchase == null) throw StateError('Purchase record not found.');
+
+    final combined = [...purchase.serialNumbers, ...clean];
+    return updatePurchase(id: purchaseId, serialNumbers: combined);
+  }
+
+  Future<PurchaseTransaction> updatePanelSerialNumber(String purchaseId, String oldSerial, String newSerial) async {
+    final trimmedOld = oldSerial.trim();
+    final trimmedNew = newSerial.trim().toUpperCase();
+    if (trimmedNew.isEmpty) throw ArgumentError('New serial number cannot be empty.');
+    if (trimmedOld.toUpperCase() == trimmedNew) {
+      final p = await purchaseRepository.getPurchaseById(purchaseId);
+      return p!;
+    }
+
+    if (await _shouldUseApi()) {
+      final updated = await apiService!.updatePanelSerial(purchaseId, trimmedOld, trimmedNew);
+      await purchaseRepository.savePurchase(updated);
+      final panel = await panelRepository.getPanelBySerialNumber(trimmedOld);
+      if (panel != null) {
+        await panelRepository.deletePanels([trimmedOld]);
+        await panelRepository.savePanel(panel.copyWith(
+          serialNumber: trimmedNew,
+          updatedAt: DateTime.now(),
+        ));
+      }
+      return updated;
+    }
+
+    final purchase = await purchaseRepository.getPurchaseById(purchaseId);
+    if (purchase == null) throw StateError('Purchase record not found.');
+
+    final snIndex = purchase.serialNumbers.indexWhere((s) => s.toUpperCase() == trimmedOld.toUpperCase());
+    if (snIndex == -1) throw StateError('Serial "$oldSerial" not found in batch "${purchase.batchNumber}".');
+
+    final existing = await panelRepository.getPanelBySerialNumber(trimmedNew);
+    if (existing != null) {
+      throw StateError('Serial number "$trimmedNew" already exists in inventory.');
+    }
+
+    final actualOld = purchase.serialNumbers[snIndex];
+    final panel = await panelRepository.getPanelBySerialNumber(actualOld);
+    if (panel != null) {
+      await panelRepository.deletePanels([actualOld]);
+      await panelRepository.savePanel(panel.copyWith(
+        serialNumber: trimmedNew,
+        updatedAt: DateTime.now(),
+      ));
+
+      if (panel.isSold && panel.saleId != null) {
+        final sale = await saleRepository.getSaleById(panel.saleId!);
+        if (sale != null) {
+          final sIdx = sale.serialNumbers.indexWhere((s) => s.toUpperCase() == actualOld.toUpperCase());
+          if (sIdx != -1) {
+            final updatedSerials = List<String>.from(sale.serialNumbers);
+            updatedSerials[sIdx] = trimmedNew;
+            await saleRepository.saveSale(sale.copyWith(serialNumbers: updatedSerials, updatedAt: DateTime.now()));
+          }
+        }
+      }
+    }
+
+    final updatedList = List<String>.from(purchase.serialNumbers);
+    updatedList[snIndex] = trimmedNew;
+    final updatedPurchase = purchase.copyWith(serialNumbers: updatedList, updatedAt: DateTime.now());
+    await purchaseRepository.savePurchase(updatedPurchase);
+    return updatedPurchase;
+  }
+
+  Future<PurchaseTransaction> deletePanelFromPurchase(String purchaseId, String serialNumber) async {
+    final sn = serialNumber.trim().toUpperCase();
+    if (await _shouldUseApi()) {
+      final updated = await apiService!.deletePanelFromPurchase(purchaseId, sn);
+      await purchaseRepository.savePurchase(updated);
+      await panelRepository.deletePanels([sn]);
+      return updated;
+    }
+
+    final purchase = await purchaseRepository.getPurchaseById(purchaseId);
+    if (purchase == null) throw StateError('Purchase record not found.');
+
+    final panel = await panelRepository.getPanelBySerialNumber(sn);
+    if (panel != null && panel.isSold) {
+      throw StateError('Cannot remove panel "$sn" because it has already been sold in sale "${panel.saleId}".');
+    }
+
+    final filtered = purchase.serialNumbers.where((s) => s.toUpperCase() != sn).toList();
+    if (filtered.length == purchase.serialNumbers.length) {
+      throw StateError('Serial "$serialNumber" not found in purchase.');
+    }
+
+    return updatePurchase(id: purchaseId, serialNumbers: filtered);
+  }
+
   Future<void> deletePurchase(String purchaseId) async {
     if (await _shouldUseApi()) {
       final local = await purchaseRepository.getPurchaseById(purchaseId);
@@ -476,6 +748,144 @@ class InventoryService {
 
     await panelRepository.savePanels(updatedPanels);
     return sale;
+  }
+
+  Future<SaleTransaction> updateSale({
+    required String id,
+    DateTime? saleDate,
+    String? customerId,
+    double? unitSellingPrice,
+    List<String>? serialNumbers,
+    String? notes,
+  }) async {
+    if (unitSellingPrice != null && unitSellingPrice < 0) {
+      throw ArgumentError('Unit selling price cannot be negative.');
+    }
+
+    if (await _shouldUseApi()) {
+      final updated = await apiService!.updateSale(
+        id,
+        saleDate: saleDate,
+        customerId: customerId,
+        unitSellingPrice: unitSellingPrice,
+        serialNumbers: serialNumbers,
+        notes: notes,
+      );
+      await saleRepository.saveSale(updated);
+
+      if (serialNumbers != null) {
+        final localSale = await saleRepository.getSaleById(id);
+        if (localSale != null) {
+          final removed = localSale.serialNumbers.where((s) => !serialNumbers.contains(s)).toList();
+          for (final sn in removed) {
+            final p = await panelRepository.getPanelBySerialNumber(sn);
+            if (p != null) {
+              await panelRepository.savePanel(p.copyWith(
+                status: PanelStatus.available,
+                clearSaleId: true,
+                updatedAt: DateTime.now(),
+              ));
+            }
+          }
+          for (final sn in serialNumbers) {
+            final p = await panelRepository.getPanelBySerialNumber(sn);
+            if (p != null) {
+              await panelRepository.savePanel(p.copyWith(
+                status: PanelStatus.sold,
+                saleId: id,
+                updatedAt: DateTime.now(),
+              ));
+            }
+          }
+        }
+      }
+      return updated;
+    }
+
+    final sale = await saleRepository.getSaleById(id);
+    if (sale == null) throw StateError('Sale record "$id" not found.');
+
+    Customer? newCustomer;
+    if (customerId != null && customerId != sale.customerId) {
+      newCustomer = await customerRepository.getCustomerById(customerId);
+      if (newCustomer == null) throw StateError('Customer "$customerId" not found.');
+    }
+
+    final sDate = saleDate ?? sale.saleDate;
+    final price = unitSellingPrice ?? sale.unitSellingPrice;
+    final sNotes = notes != null ? (notes.trim().isEmpty ? null : notes.trim()) : sale.notes;
+
+    List<String> finalSerials = sale.serialNumbers;
+
+    if (serialNumbers != null) {
+      final clean = serialNumbers.map((s) => s.trim().toUpperCase()).where((s) => s.isNotEmpty).toList();
+      if (clean.isEmpty) {
+        throw ArgumentError('Sale must contain at least one panel serial number.');
+      }
+      final uniqueSet = clean.toSet();
+      if (uniqueSet.length != clean.length) {
+        throw StateError('Duplicate serial numbers in sale selection.');
+      }
+
+      final oldUpper = sale.serialNumbers.map((s) => s.toUpperCase()).toSet();
+      final removed = sale.serialNumbers.where((s) => !uniqueSet.contains(s.toUpperCase())).toList();
+      final added = clean.where((s) => !oldUpper.contains(s)).toList();
+
+      for (final sn in added) {
+        final panel = await panelRepository.getPanelBySerialNumber(sn);
+        if (panel == null) {
+          throw StateError('Panel serial "$sn" not found in inventory.');
+        }
+        if (!panel.isAvailable) {
+          throw StateError('Panel serial "$sn" is not available for sale.');
+        }
+        if (panel.wattage != sale.panelWattage) {
+          throw StateError('Panel serial "$sn" is ${panel.wattage}W, expected ${sale.panelWattage}W.');
+        }
+      }
+
+      // Reconcile removed panels -> available
+      for (final sn in removed) {
+        final panel = await panelRepository.getPanelBySerialNumber(sn);
+        if (panel != null) {
+          await panelRepository.savePanel(panel.copyWith(
+            status: PanelStatus.available,
+            clearSaleId: true,
+            updatedAt: DateTime.now(),
+          ));
+        }
+      }
+
+      // Reconcile added panels -> sold
+      for (final sn in added) {
+        final panel = await panelRepository.getPanelBySerialNumber(sn);
+        if (panel != null) {
+          await panelRepository.savePanel(panel.copyWith(
+            status: PanelStatus.sold,
+            saleId: sale.id,
+            updatedAt: DateTime.now(),
+          ));
+        }
+      }
+
+      finalSerials = clean;
+    }
+
+    final updated = sale.copyWith(
+      saleDate: sDate,
+      customerId: newCustomer?.id ?? sale.customerId,
+      consumerNumber: newCustomer?.consumerNumber ?? sale.consumerNumber,
+      customerName: newCustomer != null ? newCustomer.name : sale.customerName,
+      quantity: finalSerials.length,
+      serialNumbers: finalSerials,
+      unitSellingPrice: price,
+      totalSellingAmount: finalSerials.length * price,
+      notes: sNotes,
+      updatedAt: DateTime.now(),
+    );
+
+    await saleRepository.saveSale(updated);
+    return updated;
   }
 
   Future<void> deleteSale(String saleId) async {

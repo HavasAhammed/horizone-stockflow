@@ -464,6 +464,7 @@ export class DataService {
       batchNumber?: string;
       unitPurchasePrice?: number;
       notes?: string;
+      serialNumbers?: string[];
     }
   ): PurchaseTransaction {
     const purchase = this.purchases.get(id);
@@ -491,7 +492,6 @@ export class DataService {
       const price = Number(data.unitPurchasePrice);
       if (isNaN(price) || price < 0) throw new Error('Price cannot be negative.');
       purchase.unitPurchasePrice = price;
-      purchase.totalPurchaseAmount = Math.round(purchase.quantity * price * 100) / 100;
       for (const sn of purchase.serialNumbers) {
         const p = this.panels.get(sn);
         if (p) p.purchasePrice = price;
@@ -501,6 +501,75 @@ export class DataService {
       purchase.notes = data.notes.trim() || undefined;
     }
 
+    // Reconcile serial numbers if updated or added
+    let removedSerials: string[] = [];
+    let newPanels: PanelItem[] = [];
+
+    if (data.serialNumbers !== undefined) {
+      const newSerials = data.serialNumbers
+        .map((s) => s.trim().toUpperCase())
+        .filter((s) => s.length > 0);
+      if (newSerials.length === 0) {
+        throw new Error('Purchase batch must contain at least one panel serial number.');
+      }
+      const uniqueSet = new Set(newSerials);
+      if (uniqueSet.size !== newSerials.length) {
+        throw new Error('Duplicate serial numbers in updated batch list.');
+      }
+
+      const oldSerialsUpper = new Set(purchase.serialNumbers.map((s) => s.toUpperCase()));
+      removedSerials = purchase.serialNumbers.filter((sn) => !uniqueSet.has(sn.toUpperCase()));
+      const addedSerials = newSerials.filter((sn) => !oldSerialsUpper.has(sn));
+
+      // Validate removed panels: cannot remove if already sold
+      for (const sn of removedSerials) {
+        const panel = this.panels.get(sn);
+        if (panel && panel.status === 'sold') {
+          throw new Error(
+            `Cannot remove panel "${sn}" from batch "${purchase.batchNumber}" because it has already been sold in sale "${panel.saleId}".`
+          );
+        }
+      }
+
+      // Validate added panels: cannot already exist in inventory
+      for (const sn of addedSerials) {
+        if (this.panels.has(sn)) {
+          const existing = this.panels.get(sn)!;
+          throw new Error(
+            `Serial number "${sn}" already exists in inventory (Batch: ${existing.batchNumber}, Status: ${existing.status}).`
+          );
+        }
+      }
+
+      // Remove panels
+      for (const sn of removedSerials) {
+        this.panels.delete(sn);
+      }
+
+      // Add new panels
+      for (const sn of addedSerials) {
+        const panel: PanelItem = {
+          id: uuidv4(),
+          serialNumber: sn,
+          batchNumber: purchase.batchNumber,
+          wattage: purchase.wattage,
+          purchaseId: purchase.id,
+          purchasePrice: purchase.unitPurchasePrice,
+          status: 'available',
+          saleId: null,
+          createdAt: purchase.purchaseDate || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        this.panels.set(sn, panel);
+        newPanels.push(panel);
+      }
+
+      purchase.serialNumbers = newSerials;
+      purchase.quantity = newSerials.length;
+    }
+
+    purchase.totalPurchaseAmount =
+      Math.round(purchase.quantity * purchase.unitPurchasePrice * 100) / 100;
     purchase.updatedAt = new Date().toISOString();
     this.purchases.set(purchase.id, purchase);
 
@@ -508,6 +577,16 @@ export class DataService {
       PurchaseModel.findOneAndUpdate({ id: purchase.id }, purchase).catch((e) =>
         console.warn('Mongo update purchase err:', e.message)
       );
+      if (removedSerials.length > 0) {
+        PanelModel.deleteMany({ serialNumber: { $in: removedSerials } }).catch((e) =>
+          console.warn('Mongo remove panels err:', e.message)
+        );
+      }
+      if (newPanels.length > 0) {
+        PanelModel.insertMany(newPanels).catch((e) =>
+          console.warn('Mongo insert new panels err:', e.message)
+        );
+      }
       PanelModel.updateMany(
         { serialNumber: { $in: purchase.serialNumbers } },
         {
@@ -519,6 +598,117 @@ export class DataService {
     }
 
     return purchase;
+  }
+
+  public addPanelsToPurchase(id: string, newSerialsToAdd: string[]): PurchaseTransaction {
+    const purchase = this.purchases.get(id);
+    if (!purchase) {
+      throw new Error(`Purchase record "${id}" not found.`);
+    }
+    const cleanNew = newSerialsToAdd
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0);
+    if (cleanNew.length === 0) {
+      throw new Error('At least one serial number is required.');
+    }
+    return this.updatePurchase(id, {
+      serialNumbers: [...purchase.serialNumbers, ...cleanNew],
+    });
+  }
+
+  public updatePanelSerial(
+    purchaseId: string,
+    oldSerialRaw: string,
+    newSerialRaw: string
+  ): PurchaseTransaction {
+    const purchase = this.purchases.get(purchaseId);
+    if (!purchase) {
+      throw new Error(`Purchase record "${purchaseId}" not found.`);
+    }
+
+    const oldSerial = oldSerialRaw.trim();
+    const newSerial = newSerialRaw.trim().toUpperCase();
+    if (!newSerial) {
+      throw new Error('New serial number cannot be empty.');
+    }
+    if (oldSerial.toUpperCase() === newSerial) {
+      return purchase;
+    }
+
+    const snIndex = purchase.serialNumbers.findIndex(
+      (s) => s.toUpperCase() === oldSerial.toUpperCase()
+    );
+    if (snIndex === -1) {
+      throw new Error(
+        `Serial "${oldSerial}" not found in purchase batch "${purchase.batchNumber}".`
+      );
+    }
+
+    if (this.panels.has(newSerial)) {
+      const existing = this.panels.get(newSerial)!;
+      throw new Error(
+        `Serial number "${newSerial}" already exists in inventory (Batch: ${existing.batchNumber}, Status: ${existing.status}).`
+      );
+    }
+
+    const actualOld = purchase.serialNumbers[snIndex];
+    const panel = this.panels.get(actualOld);
+    this.panels.delete(actualOld);
+
+    if (panel) {
+      panel.serialNumber = newSerial;
+      panel.updatedAt = new Date().toISOString();
+      this.panels.set(newSerial, panel);
+
+      if (panel.status === 'sold' && panel.saleId) {
+        const sale = this.sales.get(panel.saleId);
+        if (sale) {
+          const saleIdx = sale.serialNumbers.findIndex(
+            (s) => s.toUpperCase() === actualOld.toUpperCase()
+          );
+          if (saleIdx !== -1) {
+            sale.serialNumbers[saleIdx] = newSerial;
+            sale.updatedAt = new Date().toISOString();
+            if (mongoose.connection.readyState === 1) {
+              SaleModel.findOneAndUpdate({ id: sale.id }, sale).catch((e) =>
+                console.warn('Mongo update sale for renamed serial err:', e.message)
+              );
+            }
+          }
+        }
+      }
+    }
+
+    purchase.serialNumbers[snIndex] = newSerial;
+    purchase.updatedAt = new Date().toISOString();
+    this.purchases.set(purchase.id, purchase);
+
+    if (mongoose.connection.readyState === 1) {
+      PurchaseModel.findOneAndUpdate({ id: purchase.id }, purchase).catch((e) =>
+        console.warn('Mongo update purchase serial err:', e.message)
+      );
+      PanelModel.findOneAndUpdate(
+        { serialNumber: actualOld },
+        { serialNumber: newSerial, updatedAt: new Date().toISOString() }
+      ).catch((e) => console.warn('Mongo update panel serial err:', e.message));
+    }
+
+    return purchase;
+  }
+
+  public deletePanelFromPurchase(id: string, serialNumberRaw: string): PurchaseTransaction {
+    const purchase = this.purchases.get(id);
+    if (!purchase) {
+      throw new Error(`Purchase record "${id}" not found.`);
+    }
+    const sn = serialNumberRaw.trim().toUpperCase();
+    const filtered = purchase.serialNumbers.filter((s) => s.toUpperCase() !== sn);
+    if (filtered.length === purchase.serialNumbers.length) {
+      throw new Error(
+        `Serial "${serialNumberRaw}" not found in purchase "${purchase.batchNumber}".`
+      );
+    }
+    return this.updatePurchase(id, { serialNumbers: filtered });
   }
 
   public deletePurchase(id: string): boolean {

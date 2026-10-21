@@ -194,6 +194,66 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
       expect(res.body.success).toBe(false);
       expect(res.body.error).toMatch(/have already been sold/i);
     });
+
+    it('allows adding more panels to an existing purchase batch later', async () => {
+      const purchaseRes = await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-ADD-MORE',
+        wattage: 540,
+        quantity: 1,
+        unitPurchasePrice: 12000,
+        serialNumbers: ['INITIAL-PANEL-001'],
+      });
+      expect(purchaseRes.status).toBe(201);
+      const purchId = purchaseRes.body.data.id;
+
+      // Add two more panels later
+      const addRes = await request(app)
+        .post(`/api/v1/purchases/${purchId}/panels`)
+        .send({ serialNumbers: ['INITIAL-PANEL-002', 'INITIAL-PANEL-003'] });
+
+      expect(addRes.status).toBe(200);
+      expect(addRes.body.data.quantity).toBe(3);
+      expect(addRes.body.data.totalPurchaseAmount).toBe(36000);
+      expect(addRes.body.data.serialNumbers).toEqual([
+        'INITIAL-PANEL-001',
+        'INITIAL-PANEL-002',
+        'INITIAL-PANEL-003',
+      ]);
+
+      // Verify the new panels exist in inventory
+      const invRes = await request(app).get('/api/v1/inventory?batch=BATCH-ADD-MORE');
+      expect(invRes.body.data.length).toBe(3);
+      expect(invRes.body.data.map((p: any) => p.serialNumber)).toContain('INITIAL-PANEL-003');
+    });
+
+    it('allows editing an existing panel serial number in a batch', async () => {
+      const purchaseRes = await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-EDIT-PANEL',
+        wattage: 450,
+        quantity: 1,
+        unitPurchasePrice: 10000,
+        serialNumbers: ['TYPO-PANEL-999'],
+      });
+      const purchId = purchaseRes.body.data.id;
+
+      // Correct typo in serial number
+      const editRes = await request(app)
+        .put(`/api/v1/purchases/${purchId}/panels/TYPO-PANEL-999`)
+        .send({ newSerialNumber: 'FIXED-PANEL-999' });
+
+      expect(editRes.status).toBe(200);
+      expect(editRes.body.data.serialNumbers).toContain('FIXED-PANEL-999');
+      expect(editRes.body.data.serialNumbers).not.toContain('TYPO-PANEL-999');
+
+      // Verify inventory reflects the renamed panel
+      const oldCheck = await request(app).get('/api/v1/inventory?search=TYPO-PANEL-999');
+      expect(oldCheck.body.data.length).toBe(0);
+
+      const newCheck = await request(app).get('/api/v1/inventory?search=FIXED-PANEL-999');
+      expect(newCheck.body.data.length).toBe(1);
+      expect(newCheck.body.data[0].serialNumber).toBe('FIXED-PANEL-999');
+      expect(newCheck.body.data[0].batchNumber).toBe('BATCH-EDIT-PANEL');
+    });
   });
 
   describe('Sales Allocation & Inventory Deduction', () => {
@@ -331,6 +391,49 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
       panel = await request(app).get('/api/v1/inventory?search=SN-RECONCILE-TEST');
       expect(panel.body.data[0].status).toBe('available');
       expect(panel.body.data[0].saleId).toBeNull();
+    });
+
+    it('reconciles inventory when a sale is updated with new panel serials', async () => {
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '9988776655443',
+        phone: '+91 98470 99887',
+        name: 'Sale Update Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-SALE-UPDATE',
+        wattage: 540,
+        quantity: 3,
+        unitPurchasePrice: 11000,
+        serialNumbers: ['SN-UPD-1', 'SN-UPD-2', 'SN-UPD-3'],
+      });
+
+      // Sell SN-UPD-1 and SN-UPD-2
+      const saleRes = await request(app).post('/api/v1/sales').send({
+        customerId: custId,
+        panelWattage: 540,
+        unitSellingPrice: 15000,
+        serialNumbers: ['SN-UPD-1', 'SN-UPD-2'],
+      });
+      expect(saleRes.status).toBe(201);
+      const saleId = saleRes.body.data.id;
+
+      // Update sale: swap SN-UPD-2 for SN-UPD-3
+      const updateRes = await request(app).put(`/api/v1/sales/${saleId}`).send({
+        serialNumbers: ['SN-UPD-1', 'SN-UPD-3'],
+      });
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.serialNumbers).toEqual(['SN-UPD-1', 'SN-UPD-3']);
+
+      // SN-UPD-2 should be available again
+      const p2 = await request(app).get('/api/v1/inventory?search=SN-UPD-2');
+      expect(p2.body.data[0].status).toBe('available');
+
+      // SN-UPD-3 should now be sold
+      const p3 = await request(app).get('/api/v1/inventory?search=SN-UPD-3');
+      expect(p3.body.data[0].status).toBe('sold');
+      expect(p3.body.data[0].saleId).toBe(saleId);
     });
   });
 
