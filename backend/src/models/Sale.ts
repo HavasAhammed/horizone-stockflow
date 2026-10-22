@@ -7,6 +7,7 @@ export interface ISaleDoc extends Document {
   consumerNumber: string;
   customerName?: string;
   panelWattage: number;
+  type: string;
   quantity: number;
   serialNumbers: string[];
   unitSellingPrice: number;
@@ -24,6 +25,12 @@ const saleSchema = new Schema<ISaleDoc>(
     consumerNumber: { type: String, required: true, index: true },
     customerName: { type: String },
     panelWattage: { type: Number, required: true },
+    type: {
+      type: String,
+      enum: ['DCR', 'Non DCR'],
+      default: 'DCR',
+      index: true,
+    },
     quantity: { type: Number, required: true },
     serialNumbers: { type: [String], required: true },
     unitSellingPrice: { type: Number, required: true },

@@ -199,6 +199,7 @@ class InventoryService {
     String? supplierName,
     required String batchNumber,
     required int wattage,
+    String type = 'DCR',
     required int quantity,
     required List<String> serialNumbers,
     required double unitPurchasePrice,
@@ -211,6 +212,7 @@ class InventoryService {
     if (wattage <= 0) {
       throw ArgumentError('Panel wattage must be a positive integer in Watts.');
     }
+    final panelType = type.trim().toUpperCase() == 'NON DCR' ? 'Non DCR' : 'DCR';
     if (quantity <= 0) {
       throw ArgumentError('Quantity must be a positive integer.');
     }
@@ -234,6 +236,7 @@ class InventoryService {
         supplierName: supplierName,
         batchNumber: trimmedBatch,
         wattage: wattage,
+        type: panelType,
         quantity: quantity,
         serialNumbers: cleanSerials,
         unitPurchasePrice: unitPurchasePrice,
@@ -247,6 +250,7 @@ class InventoryService {
           serialNumber: sn,
           batchNumber: trimmedBatch,
           wattage: wattage,
+          type: panelType,
           purchaseId: purchase.id,
           purchasePrice: unitPurchasePrice,
           status: PanelStatus.available,
@@ -287,6 +291,7 @@ class InventoryService {
       supplierName: supplierName?.trim().isEmpty == true ? null : supplierName?.trim(),
       batchNumber: trimmedBatch,
       wattage: wattage,
+      type: panelType,
       quantity: quantity,
       serialNumbers: cleanSerials,
       unitPurchasePrice: unitPurchasePrice,
@@ -305,6 +310,7 @@ class InventoryService {
         serialNumber: sn,
         batchNumber: trimmedBatch,
         wattage: wattage,
+        type: panelType,
         purchaseId: purchase.id,
         purchasePrice: unitPurchasePrice,
         status: PanelStatus.available,
@@ -323,6 +329,7 @@ class InventoryService {
     DateTime? purchaseDate,
     String? supplierName,
     String? batchNumber,
+    String? type,
     double? unitPurchasePrice,
     String? notes,
     List<String>? serialNumbers,
@@ -333,6 +340,7 @@ class InventoryService {
         purchaseDate: purchaseDate,
         supplierName: supplierName,
         batchNumber: batchNumber,
+        type: type,
         unitPurchasePrice: unitPurchasePrice,
         notes: notes,
         serialNumbers: serialNumbers,
@@ -353,6 +361,7 @@ class InventoryService {
             serialNumber: sn,
             batchNumber: updated.batchNumber,
             wattage: updated.wattage,
+            type: updated.type,
             purchaseId: updated.id,
             purchasePrice: updated.unitPurchasePrice,
             status: PanelStatus.available,
@@ -378,6 +387,9 @@ class InventoryService {
     }
 
     final newBatch = trimmedBatch ?? purchase.batchNumber;
+    final newType = type?.trim().isNotEmpty == true
+        ? (type!.trim().toUpperCase() == 'NON DCR' ? 'Non DCR' : 'DCR')
+        : purchase.type;
     final newPrice = unitPurchasePrice ?? purchase.unitPurchasePrice;
     final newDate = purchaseDate ?? purchase.purchaseDate;
     final newSupplier = supplierName != null
@@ -425,6 +437,7 @@ class InventoryService {
           serialNumber: sn,
           batchNumber: newBatch,
           wattage: purchase.wattage,
+          type: newType,
           purchaseId: purchase.id,
           purchasePrice: newPrice,
           status: PanelStatus.available,
@@ -438,14 +451,15 @@ class InventoryService {
       finalSerials = clean;
     }
 
-    // Update existing panels if batch number or price changed
-    if (newBatch != purchase.batchNumber || newPrice != purchase.unitPurchasePrice) {
+    // Update existing panels if batch number, price, or type changed
+    if (newBatch != purchase.batchNumber || newPrice != purchase.unitPurchasePrice || newType != purchase.type) {
       for (final sn in finalSerials) {
         final p = await panelRepository.getPanelBySerialNumber(sn);
         if (p != null) {
           await panelRepository.savePanel(p.copyWith(
             batchNumber: newBatch,
             purchasePrice: newPrice,
+            type: newType,
             updatedAt: DateTime.now(),
           ));
         }
@@ -456,6 +470,7 @@ class InventoryService {
       purchaseDate: newDate,
       supplierName: newSupplier,
       batchNumber: newBatch,
+      type: newType,
       quantity: finalSerials.length,
       serialNumbers: finalSerials,
       unitPurchasePrice: newPrice,
@@ -648,6 +663,7 @@ class InventoryService {
     DateTime? saleDate,
     required String customerId,
     required int panelWattage,
+    String type = 'DCR',
     required List<String> serialNumbers,
     required double unitSellingPrice,
     String? notes,
@@ -655,6 +671,7 @@ class InventoryService {
     if (panelWattage <= 0) {
       throw ArgumentError('Wattage must be a positive integer.');
     }
+    final saleType = type.trim().toUpperCase() == 'NON DCR' ? 'Non DCR' : 'DCR';
     if (unitSellingPrice < 0) {
       throw ArgumentError('Unit selling price cannot be negative.');
     }
@@ -673,6 +690,7 @@ class InventoryService {
         saleDate: saleDate,
         customerId: customerId,
         panelWattage: panelWattage,
+        type: saleType,
         serialNumbers: cleanSerials,
         unitSellingPrice: unitSellingPrice,
         notes: notes,
@@ -697,7 +715,7 @@ class InventoryService {
       throw StateError('Selected customer not found.');
     }
 
-    // Verify all selected panels exist, match wattage, and are currently available
+    // Verify all selected panels exist, match wattage and type, and are currently available
     final List<PanelItem> panelsToSell = [];
     for (final sn in cleanSerials) {
       final panel = await panelRepository.getPanelBySerialNumber(sn);
@@ -711,6 +729,10 @@ class InventoryService {
       if (panel.wattage != panelWattage) {
         throw StateError(
             'Panel serial "$sn" is ${panel.wattage}W, expected $panelWattage W.');
+      }
+      if (panel.type != saleType) {
+        throw StateError(
+            'Panel serial "$sn" is ${panel.type}, expected $saleType.');
       }
       panelsToSell.add(panel);
     }
@@ -726,6 +748,7 @@ class InventoryService {
       consumerNumber: customer.consumerNumber,
       customerName: customer.name,
       panelWattage: panelWattage,
+      type: saleType,
       quantity: quantity,
       serialNumbers: cleanSerials,
       unitSellingPrice: unitSellingPrice,
@@ -754,6 +777,7 @@ class InventoryService {
     required String id,
     DateTime? saleDate,
     String? customerId,
+    String? type,
     double? unitSellingPrice,
     List<String>? serialNumbers,
     String? notes,
@@ -767,6 +791,7 @@ class InventoryService {
         id,
         saleDate: saleDate,
         customerId: customerId,
+        type: type,
         unitSellingPrice: unitSellingPrice,
         serialNumbers: serialNumbers,
         notes: notes,
@@ -812,6 +837,9 @@ class InventoryService {
     }
 
     final sDate = saleDate ?? sale.saleDate;
+    final newType = type?.trim().isNotEmpty == true
+        ? (type!.trim().toUpperCase() == 'NON DCR' ? 'Non DCR' : 'DCR')
+        : sale.type;
     final price = unitSellingPrice ?? sale.unitSellingPrice;
     final sNotes = notes != null ? (notes.trim().isEmpty ? null : notes.trim()) : sale.notes;
 
@@ -841,6 +869,9 @@ class InventoryService {
         }
         if (panel.wattage != sale.panelWattage) {
           throw StateError('Panel serial "$sn" is ${panel.wattage}W, expected ${sale.panelWattage}W.');
+        }
+        if (panel.type != newType) {
+          throw StateError('Panel serial "$sn" is ${panel.type}, expected $newType.');
         }
       }
 
@@ -876,6 +907,7 @@ class InventoryService {
       customerId: newCustomer?.id ?? sale.customerId,
       consumerNumber: newCustomer?.consumerNumber ?? sale.consumerNumber,
       customerName: newCustomer != null ? newCustomer.name : sale.customerName,
+      type: newType,
       quantity: finalSerials.length,
       serialNumbers: finalSerials,
       unitSellingPrice: price,
@@ -954,15 +986,44 @@ class InventoryService {
     return panelRepository.getAllPanels();
   }
 
-  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async {
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage, {String? type}) async {
     if (await _shouldUseApi()) {
       try {
-        return await apiService!.getAvailablePanelsByWattage(wattage);
+        return await apiService!.getAvailablePanelsByWattage(wattage, type: type);
       } catch (_) {
-        return panelRepository.getAvailablePanelsByWattage(wattage);
+        return panelRepository.getAvailablePanelsByWattage(wattage, type: type);
       }
     }
-    return panelRepository.getAvailablePanelsByWattage(wattage);
+    return panelRepository.getAvailablePanelsByWattage(wattage, type: type);
+  }
+
+  Future<void> migrateExistingDataToDcr() async {
+    try {
+      final panels = await panelRepository.getAllPanels();
+      final panelsToUpdate = <PanelItem>[];
+      for (final p in panels) {
+        if (p.type.isEmpty) {
+          panelsToUpdate.add(p.copyWith(type: 'DCR'));
+        }
+      }
+      if (panelsToUpdate.isNotEmpty) {
+        await panelRepository.savePanels(panelsToUpdate);
+      }
+
+      final purchases = await purchaseRepository.getAllPurchases();
+      for (final pu in purchases) {
+        if (pu.type.isEmpty) {
+          await purchaseRepository.savePurchase(pu.copyWith(type: 'DCR'));
+        }
+      }
+
+      final sales = await saleRepository.getAllSales();
+      for (final s in sales) {
+        if (s.type.isEmpty) {
+          await saleRepository.saveSale(s.copyWith(type: 'DCR'));
+        }
+      }
+    } catch (_) {}
   }
 
   Future<Map<int, Map<String, dynamic>>> getStockByWattage() async {

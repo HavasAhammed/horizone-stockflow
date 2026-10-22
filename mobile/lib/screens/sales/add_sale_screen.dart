@@ -25,6 +25,7 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
 
   String? _selectedCustomerId;
   int _selectedWattage = 540;
+  String _selectedType = 'DCR';
   final _priceController = TextEditingController(text: '14500');
   final _notesController = TextEditingController();
   final _scanController = TextEditingController();
@@ -49,9 +50,9 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
 
       final inv = context.read<InventoryProvider>();
       // If default 540 has 0 in stock, switch to the first wattage that has available stock
-      if (inv.getAvailableCount(_selectedWattage) == 0) {
+      if (inv.getAvailableCount(_selectedWattage, type: _selectedType) == 0) {
         final withStock =
-            inv.availableWattages.where((w) => inv.getAvailableCount(w) > 0);
+            inv.availableWattages.where((w) => inv.getAvailableCount(w, type: _selectedType) > 0);
         if (withStock.isNotEmpty) {
           setState(() {
             _selectedWattage = withStock.first;
@@ -76,10 +77,10 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
     try {
       final panels = await context
           .read<InventoryProvider>()
-          .getAvailablePanelsByWattage(_selectedWattage);
+          .getAvailablePanelsByWattage(_selectedWattage, type: _selectedType);
       setState(() {
         _availablePanels = panels;
-        // Keep only selected serials that are available in new wattage
+        // Keep only selected serials that are available in new wattage/type
         _selectedSerials.removeWhere(
             (sn) => !panels.any((p) => p.serialNumber == sn));
       });
@@ -144,7 +145,16 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
     SystemSound.play(SystemSoundType.alert);
 
     if (inAll != null) {
-      if (inAll.wattage != _selectedWattage) {
+      if (inAll.type != _selectedType) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Type Mismatch: "$serial" is ${inAll.type} (current sale is $_selectedType).'),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (inAll.wattage != _selectedWattage) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -190,6 +200,7 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
       MaterialPageRoute(
         builder: (ctx) => SaleBarcodeScannerScreen(
           wattage: _selectedWattage,
+          type: _selectedType,
           availablePanels: _availablePanels,
           initiallySelectedSerials: _selectedSerials,
           allInventoryPanels: allPanels,
@@ -265,7 +276,7 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
       context: context,
       title: 'Confirm Solar Sale & Dispatch',
       message:
-          'Customer: ${customer.name ?? 'Customer'}\nKSEB Consumer #: ${customer.consumerNumber}\nPanels: ${_selectedSerials.length} units (${_selectedWattage}W)\nTotal Amount: ${Formatters.formatCurrency(_totalAmount)}\n\nCommit this sale and allocate serial numbers?',
+          'Customer: ${customer.name ?? 'Customer'}\nKSEB Consumer #: ${customer.consumerNumber}\nPanels: ${_selectedSerials.length} units (${_selectedWattage}W - $_selectedType)\nTotal Amount: ${Formatters.formatCurrency(_totalAmount)}\n\nCommit this sale and allocate serial numbers?',
       confirmText: 'Confirm & Dispatch',
     );
 
@@ -278,6 +289,7 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
             saleDate: _saleDate,
             customerId: _selectedCustomerId!,
             panelWattage: _selectedWattage,
+            type: _selectedType,
             serialNumbers: _selectedSerials.toList(),
             unitSellingPrice: _unitPrice,
             notes: _notesController.text.trim().isEmpty
@@ -452,24 +464,56 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
               const SizedBox(height: 14),
             ],
 
-            // Wattage Selector Dropdown
+            // Panel Type Selector
+            DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: _selectedType,
+              decoration: const InputDecoration(
+                labelText: 'Panel Type *',
+                prefixIcon: Icon(Icons.solar_power),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'DCR',
+                  child: Text('DCR'),
+                ),
+                DropdownMenuItem(
+                  value: 'Non DCR',
+                  child: Text('Non DCR'),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null && val != _selectedType) {
+                  setState(() {
+                    _selectedType = val;
+                    _selectedSerials.clear();
+                  });
+                  _fetchAvailablePanels();
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // Wattage Selector
             DropdownButtonFormField<int>(
-              key: ValueKey(_selectedWattage),
+              key: ValueKey('${_selectedWattage}_$_selectedType'),
+              isExpanded: true,
               initialValue: availableWattages.contains(_selectedWattage)
                   ? _selectedWattage
                   : (availableWattages.isNotEmpty ? availableWattages.first : 540),
               decoration: const InputDecoration(
-                labelText: 'Panel Wattage (W) *',
-                prefixIcon: Icon(Icons.solar_power),
+                labelText: 'Wattage (W) *',
+                prefixIcon: Icon(Icons.bolt_outlined),
               ),
               items: availableWattages.map((w) {
-                final inStock = inventory.getAvailableCount(w);
+                final inStock = inventory.getAvailableCount(w, type: _selectedType);
                 final stockSuffix =
                     inStock > 0 ? ' ($inStock available)' : ' (0 available)';
                 return DropdownMenuItem<int>(
                   value: w,
                   child: Text(
                     '${Formatters.formatWattage(w)}$stockSuffix',
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
                       color: inStock > 0 ? AppColors.textMain : AppColors.textSecondary,
@@ -680,31 +724,34 @@ class _AddSaleScreenState extends State<AddSaleScreen> {
                       const SizedBox(height: 10),
 
                       // Filter Pills for easily managing large stocks (e.g. 500+ panels)
-                      Row(
-                        children: [
-                          ChoiceChip(
-                            label: Text('All (${_availablePanels.length})'),
-                            selected: _filterTab == 'all',
-                            onSelected: (_) =>
-                                setState(() => _filterTab = 'all'),
-                          ),
-                          const SizedBox(width: 6),
-                          ChoiceChip(
-                            label: Text('Selected (${_selectedSerials.length})'),
-                            selected: _filterTab == 'selected',
-                            selectedColor: AppColors.primaryBlueLight,
-                            onSelected: (_) =>
-                                setState(() => _filterTab = 'selected'),
-                          ),
-                          const SizedBox(width: 6),
-                          ChoiceChip(
-                            label: Text(
-                                'Unselected (${_availablePanels.length - _selectedSerials.length})'),
-                            selected: _filterTab == 'unselected',
-                            onSelected: (_) =>
-                                setState(() => _filterTab = 'unselected'),
-                          ),
-                        ],
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ChoiceChip(
+                              label: Text('All (${_availablePanels.length})'),
+                              selected: _filterTab == 'all',
+                              onSelected: (_) =>
+                                  setState(() => _filterTab = 'all'),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              label: Text('Selected (${_selectedSerials.length})'),
+                              selected: _filterTab == 'selected',
+                              selectedColor: AppColors.primaryBlueLight,
+                              onSelected: (_) =>
+                                  setState(() => _filterTab = 'selected'),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              label: Text(
+                                  'Unselected (${_availablePanels.length - _selectedSerials.length})'),
+                              selected: _filterTab == 'unselected',
+                              onSelected: (_) =>
+                                  setState(() => _filterTab = 'unselected'),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                     ],

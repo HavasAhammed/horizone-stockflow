@@ -28,6 +28,7 @@ class _AddPurchaseScreenState extends State<AddPurchaseScreen> {
   final _serialFocusNode = FocusNode();
 
   DateTime _purchaseDate = DateTime.now();
+  String _selectedType = 'DCR';
   bool _isSubmitting = false;
 
   // List of entered/scanned serial numbers
@@ -349,6 +350,7 @@ class _AddPurchaseScreenState extends State<AddPurchaseScreen> {
                 : _supplierController.text.trim(),
             batchNumber: _batchController.text.trim(),
             wattage: wattage,
+            type: _selectedType,
             quantity: _expectedQuantity,
             serialNumbers: _serials,
             unitPurchasePrice: double.parse(_priceController.text),
@@ -451,9 +453,35 @@ class _AddPurchaseScreenState extends State<AddPurchaseScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Wattage & Quantity
+            // Panel Type & Wattage
             Row(
               children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _selectedType,
+                    decoration: const InputDecoration(
+                      labelText: 'Panel Type *',
+                      prefixIcon: Icon(Icons.solar_power),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'DCR',
+                        child: Text('DCR'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Non DCR',
+                        child: Text('Non DCR'),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedType = val);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TextFormField(
                     controller: _wattageController,
@@ -470,7 +498,13 @@ class _AddPurchaseScreenState extends State<AddPurchaseScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Quantity & Unit Price
+            Row(
+              children: [
                 Expanded(
                   child: TextFormField(
                     controller: _quantityController,
@@ -488,23 +522,24 @@ class _AddPurchaseScreenState extends State<AddPurchaseScreen> {
                     },
                   ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _priceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Unit Purchase Price (₹) *',
+                      hintText: '11500',
+                      prefixIcon: Icon(Icons.currency_rupee),
+                    ),
+                    validator: (v) {
+                      final val = double.tryParse(v ?? '');
+                      if (val == null || val < 0) return 'Must be ≥ 0';
+                      return null;
+                    },
+                  ),
+                ),
               ],
-            ),
-            const SizedBox(height: 12),
-
-            TextFormField(
-              controller: _priceController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Unit Purchase Price (₹) *',
-                hintText: '11500',
-                prefixIcon: Icon(Icons.currency_rupee),
-              ),
-              validator: (v) {
-                final val = double.tryParse(v ?? '');
-                if (val == null || val < 0) return 'Must be ≥ 0';
-                return null;
-              },
             ),
             const SizedBox(height: 16),
 

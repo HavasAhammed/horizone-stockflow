@@ -49,9 +49,14 @@ class InventoryProvider extends ChangeNotifier {
     return list;
   }
 
-  /// Returns the number of currently available panels for a given wattage.
-  int getAvailableCount(int wattage) {
-    return _panels.where((p) => p.wattage == wattage && p.isAvailable).length;
+  /// Returns the number of currently available panels for a given wattage and optional type.
+  int getAvailableCount(int wattage, {String? type}) {
+    return _panels
+        .where((p) =>
+            p.wattage == wattage &&
+            p.isAvailable &&
+            (type == null || p.type == type))
+        .length;
   }
 
   void setSearchQuery(String query) {
@@ -84,7 +89,7 @@ class InventoryProvider extends ChangeNotifier {
     }
   }
 
-  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async {
-    return inventoryService.getAvailablePanelsByWattage(wattage);
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage, {String? type}) async {
+    return inventoryService.getAvailablePanelsByWattage(wattage, type: type);
   }
 }

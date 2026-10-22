@@ -4,7 +4,7 @@ import '../models/panel_item.dart';
 abstract class PanelRepository {
   Future<List<PanelItem>> getAllPanels();
   Future<PanelItem?> getPanelBySerialNumber(String serialNumber);
-  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage);
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage, {String? type});
   Future<void> savePanel(PanelItem panel);
   Future<void> savePanels(List<PanelItem> panels);
   Future<void> deletePanel(String serialNumber);
@@ -29,10 +29,13 @@ class HivePanelRepository implements PanelRepository {
   }
 
   @override
-  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async {
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage, {String? type}) async {
     final list = _box.values
         .map((v) => PanelItem.fromMap(v as Map))
-        .where((p) => p.wattage == wattage && p.isAvailable)
+        .where((p) =>
+            p.wattage == wattage &&
+            p.isAvailable &&
+            (type == null || p.type.toLowerCase() == type.toLowerCase()))
         .toList();
     list.sort((a, b) => a.serialNumber.compareTo(b.serialNumber));
     return list;

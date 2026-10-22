@@ -3,7 +3,7 @@ import { dataService } from '../services/dataService.js';
 
 export const getInventory = (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { wattage, batch, status, search } = req.query;
+    const { wattage, batch, type, status, search } = req.query;
     const filters: any = {};
 
     if (wattage && !isNaN(Number(wattage))) {
@@ -11,6 +11,9 @@ export const getInventory = (req: Request, res: Response, next: NextFunction) =>
     }
     if (batch && typeof batch === 'string') {
       filters.batchNumber = batch;
+    }
+    if (type && typeof type === 'string') {
+      filters.type = type;
     }
     if (status === 'available' || status === 'sold') {
       filters.status = status;
@@ -32,7 +35,11 @@ export const getAvailablePanelsByWattage = (req: Request, res: Response, next: N
     if (isNaN(wattage) || wattage <= 0) {
       return res.status(400).json({ success: false, error: 'Invalid wattage parameter' });
     }
-    const panels = dataService.getAvailablePanelsByWattage(wattage);
+    const { type } = req.query;
+    const panels = dataService.getAvailablePanelsByWattage(
+      wattage,
+      typeof type === 'string' ? type : undefined
+    );
     res.json({ success: true, count: panels.length, data: panels });
   } catch (error) {
     next(error);

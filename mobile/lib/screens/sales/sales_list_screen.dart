@@ -202,20 +202,34 @@ class _SalesListScreenState extends State<SalesListScreen> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              s.customerName ?? 'Customer',
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.textMain,
+                                            Expanded(
+                                              child: Text(
+                                                s.customerName ?? 'Customer',
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.textMain,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            BadgeWidget(
-                                              text: '${s.panelWattage}W',
-                                              type: BadgeType.success,
+                                            const SizedBox(width: 8),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                BadgeWidget(
+                                                  text: s.type,
+                                                  type: s.type == 'DCR'
+                                                      ? BadgeType.success
+                                                      : BadgeType.warning,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                BadgeWidget(
+                                                  text: '${s.panelWattage}W',
+                                                  type: BadgeType.info,
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
@@ -228,19 +242,24 @@ class _SalesListScreenState extends State<SalesListScreen> {
                                             fontWeight: FontWeight.w600,
                                             color: AppColors.primaryBlue,
                                           ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         const SizedBox(height: 10),
                                         Row(
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              '${s.quantity} panels • ${Formatters.formatDate(s.saleDate)}',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.textSecondary,
+                                            Expanded(
+                                              child: Text(
+                                                '${s.quantity} panels • ${Formatters.formatDate(s.saleDate)}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
+                                            const SizedBox(width: 8),
                                             Text(
                                               Formatters.formatCurrency(
                                                   s.totalSellingAmount),
@@ -265,6 +284,7 @@ class _SalesListScreenState extends State<SalesListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'sales_list_fab',
         backgroundColor: AppColors.solarGreenDark,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_shopping_cart),

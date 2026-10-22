@@ -470,4 +470,78 @@ describe('Horizone StockFlow Backend API & Inventory Rules', () => {
       expect(Array.isArray(data.recentSales)).toBe(true);
     });
   });
+
+  describe('Panel Type (DCR & Non DCR) Invariants', () => {
+    it('defaults purchase and created panels to DCR if type is omitted', async () => {
+      const purRes = await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-DCR-DEF',
+        wattage: 540,
+        quantity: 1,
+        unitPurchasePrice: 10000,
+        serialNumbers: ['SN-DCR-DEF-1'],
+      });
+      expect(purRes.status).toBe(201);
+      expect(purRes.body.data.type).toBe('DCR');
+
+      const panelRes = await request(app).get('/api/v1/inventory?search=SN-DCR-DEF-1');
+      expect(panelRes.status).toBe(200);
+      expect(panelRes.body.data[0].type).toBe('DCR');
+    });
+
+    it('records Non DCR purchase and creates Non DCR panels', async () => {
+      const purRes = await request(app).post('/api/v1/purchases').send({
+        batchNumber: 'BATCH-NON-DCR',
+        wattage: 540,
+        type: 'Non DCR',
+        quantity: 1,
+        unitPurchasePrice: 9500,
+        serialNumbers: ['SN-NON-DCR-1'],
+      });
+      expect(purRes.status).toBe(201);
+      expect(purRes.body.data.type).toBe('Non DCR');
+
+      const panelRes = await request(app).get('/api/v1/inventory?search=SN-NON-DCR-1');
+      expect(panelRes.status).toBe(200);
+      expect(panelRes.body.data[0].type).toBe('Non DCR');
+    });
+
+    it('rejects selling Non DCR panel when sale requests DCR panels', async () => {
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '3344556677889',
+        phone: '+91 97777 88888',
+        name: 'Type Test Cust',
+      });
+      const custId = custRes.body.data.id;
+
+      // Try to sell the Non DCR panel in a DCR sale
+      const saleRes = await request(app).post('/api/v1/sales').send({
+        customerId: custId,
+        panelWattage: 540,
+        type: 'DCR',
+        unitSellingPrice: 13000,
+        serialNumbers: ['SN-NON-DCR-1'],
+      });
+      expect(saleRes.status).toBe(400);
+      expect(saleRes.body.error).toMatch(/does not match requested sale type DCR/i);
+    });
+
+    it('successfully sells Non DCR panels when sale requests Non DCR', async () => {
+      const custRes = await request(app).post('/api/v1/customers').send({
+        consumerNumber: '4455667788990',
+        phone: '+91 96666 77777',
+        name: 'Non DCR Buyer',
+      });
+      const custId = custRes.body.data.id;
+
+      const saleRes = await request(app).post('/api/v1/sales').send({
+        customerId: custId,
+        panelWattage: 540,
+        type: 'Non DCR',
+        unitSellingPrice: 12000,
+        serialNumbers: ['SN-NON-DCR-1'],
+      });
+      expect(saleRes.status).toBe(201);
+      expect(saleRes.body.data.type).toBe('Non DCR');
+    });
+  });
 });

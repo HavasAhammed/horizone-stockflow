@@ -5,6 +5,7 @@ class PanelItem {
   final String serialNumber;
   final String batchNumber;
   final int wattage; // in Watts (W)
+  final String type; // 'DCR' | 'Non DCR'
   final String purchaseId;
   final double purchasePrice; // in INR
   final PanelStatus status;
@@ -17,6 +18,7 @@ class PanelItem {
     required this.serialNumber,
     required this.batchNumber,
     required this.wattage,
+    this.type = 'DCR',
     required this.purchaseId,
     required this.purchasePrice,
     this.status = PanelStatus.available,
@@ -34,6 +36,7 @@ class PanelItem {
     String? serialNumber,
     String? batchNumber,
     int? wattage,
+    String? type,
     String? purchaseId,
     double? purchasePrice,
     PanelStatus? status,
@@ -47,6 +50,7 @@ class PanelItem {
       serialNumber: serialNumber ?? this.serialNumber,
       batchNumber: batchNumber ?? this.batchNumber,
       wattage: wattage ?? this.wattage,
+      type: type ?? this.type,
       purchaseId: purchaseId ?? this.purchaseId,
       purchasePrice: purchasePrice ?? this.purchasePrice,
       status: status ?? this.status,
@@ -62,6 +66,7 @@ class PanelItem {
       'serialNumber': serialNumber,
       'batchNumber': batchNumber,
       'wattage': wattage,
+      'type': type,
       'purchaseId': purchaseId,
       'purchasePrice': purchasePrice,
       'status': status.name,
@@ -77,6 +82,7 @@ class PanelItem {
       serialNumber: (map['serialNumber'] ?? '').toString(),
       batchNumber: (map['batchNumber'] ?? '').toString(),
       wattage: ((map['wattage'] ?? 0) as num).toInt(),
+      type: (map['type'] ?? map['panelType'] ?? 'DCR').toString(),
       purchaseId: (map['purchaseId'] ?? '').toString(),
       purchasePrice: ((map['purchasePrice'] ?? 0.0) as num).toDouble(),
       status: (map['status']?.toString().toLowerCase()) == 'sold'

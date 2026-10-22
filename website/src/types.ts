@@ -1,10 +1,12 @@
 export type PanelStatus = 'available' | 'sold';
+export type PanelType = 'DCR' | 'Non DCR';
 
 export interface PanelItem {
   id: string;
   serialNumber: string;
   batchNumber: string;
   wattage: number; // Watts
+  type: PanelType;
   purchaseId: string;
   purchasePrice: number; // INR
   status: PanelStatus;
@@ -29,6 +31,7 @@ export interface PurchaseTransaction {
   supplierName?: string;
   batchNumber: string;
   wattage: number;
+  type: PanelType;
   quantity: number;
   serialNumbers: string[];
   unitPurchasePrice: number;
@@ -45,6 +48,7 @@ export interface SaleTransaction {
   consumerNumber: string; // KSEB consumer confirmation
   customerName?: string;
   panelWattage: number;
+  type: PanelType;
   quantity: number;
   serialNumbers: string[];
   unitSellingPrice: number;

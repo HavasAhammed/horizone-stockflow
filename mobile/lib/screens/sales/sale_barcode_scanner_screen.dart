@@ -6,6 +6,7 @@ import '../../models/panel_item.dart';
 
 class SaleBarcodeScannerScreen extends StatefulWidget {
   final int wattage;
+  final String? type;
   final List<PanelItem> availablePanels;
   final Set<String> initiallySelectedSerials;
   final List<PanelItem> allInventoryPanels;
@@ -13,6 +14,7 @@ class SaleBarcodeScannerScreen extends StatefulWidget {
   const SaleBarcodeScannerScreen({
     super.key,
     required this.wattage,
+    this.type,
     required this.availablePanels,
     required this.initiallySelectedSerials,
     required this.allInventoryPanels,
@@ -119,7 +121,14 @@ class _SaleBarcodeScannerScreenState extends State<SaleBarcodeScannerScreen> {
     SystemSound.play(SystemSoundType.alert);
 
     if (inAll != null) {
-      if (inAll.wattage != widget.wattage) {
+      if (widget.type != null && inAll.type != widget.type) {
+        setState(() {
+          _statusMessage =
+              'Type Mismatch: "$serial" is ${inAll.type} (sale requires ${widget.type})';
+          _statusColor = AppColors.danger;
+          _statusIcon = Icons.error_outline;
+        });
+      } else if (inAll.wattage != widget.wattage) {
         setState(() {
           _statusMessage =
               'Wattage Mismatch: "$serial" is ${inAll.wattage}W (current sale is ${widget.wattage}W)';

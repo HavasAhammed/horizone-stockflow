@@ -15,7 +15,7 @@ import {
   ShoppingCart,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import type { SaleTransaction, Customer, PanelItem, StockByWattage, PurchaseTransaction } from '../types';
+import type { SaleTransaction, Customer, PanelItem, PanelType, StockByWattage, PurchaseTransaction } from '../types';
 import { Modal } from '../components/Modal';
 import { Badge } from '../components/Badge';
 import { SaleBarcodeScannerModal } from '../components/SaleBarcodeScannerModal';
@@ -66,6 +66,7 @@ export const SalesPage: React.FC = () => {
     saleDate: new Date().toISOString().split('T')[0],
     customerId: '',
     panelWattage: 540,
+    type: 'DCR' as PanelType,
     selectedSerials: [] as string[],
     unitSellingPrice: 14500,
     notes: '',
@@ -132,15 +133,15 @@ export const SalesPage: React.FC = () => {
     }
   }, [searchParams]);
 
-  // Load available panels whenever selected wattage changes in the form
+  // Load available panels whenever selected wattage or type changes in the form
   useEffect(() => {
     if (!isAddModalOpen) return;
     const fetchPanels = async () => {
       try {
         setLoadingPanels(true);
-        const panels = await apiService.getAvailablePanelsByWattage(formData.panelWattage);
+        const panels = await apiService.getAvailablePanelsByWattage(formData.panelWattage, formData.type);
         setAvailablePanels(panels);
-        // Clear selected serials that are no longer available in the new wattage
+        // Clear selected serials that are no longer available in the new wattage/type
         setFormData((prev) => ({
           ...prev,
           selectedSerials: prev.selectedSerials.filter((sn) =>
@@ -148,13 +149,13 @@ export const SalesPage: React.FC = () => {
           ),
         }));
       } catch (err: any) {
-        setError(`Failed to fetch panels for ${formData.panelWattage}W: ${err.message}`);
+        setError(`Failed to fetch panels for ${formData.panelWattage}W (${formData.type}): ${err.message}`);
       } finally {
         setLoadingPanels(false);
       }
     };
     fetchPanels();
-  }, [formData.panelWattage, isAddModalOpen]);
+  }, [formData.panelWattage, formData.type, isAddModalOpen]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,7 +215,11 @@ export const SalesPage: React.FC = () => {
     // Diagnose why it wasn't matched
     const inAll = allPanels.find((p) => p.serialNumber.toUpperCase() === serial);
     if (inAll) {
-      if (inAll.wattage !== Number(formData.panelWattage)) {
+      if (inAll.type !== formData.type) {
+        setError(
+          `Type Mismatch: "${serial}" is ${inAll.type} (current sale requires ${formData.type}).`
+        );
+      } else if (inAll.wattage !== Number(formData.panelWattage)) {
         setError(
           `Wattage Mismatch: "${serial}" is ${inAll.wattage}W (current selection is ${formData.panelWattage}W).`
         );
@@ -269,6 +274,7 @@ export const SalesPage: React.FC = () => {
         saleDate: new Date(formData.saleDate).toISOString(),
         customerId: formData.customerId,
         panelWattage: Number(formData.panelWattage),
+        type: formData.type,
         serialNumbers: formData.selectedSerials,
         unitSellingPrice: Number(formData.unitSellingPrice),
         notes: formData.notes.trim() || undefined,
@@ -278,6 +284,7 @@ export const SalesPage: React.FC = () => {
       setSuccessMsg('Sale confirmed! Inventory updated and serial numbers allocated.');
       setFormData((prev) => ({
         ...prev,
+        type: 'DCR' as PanelType,
         selectedSerials: [],
         notes: '',
       }));
@@ -532,6 +539,7 @@ export const SalesPage: React.FC = () => {
                 <th>Date</th>
                 <th>Customer Name</th>
                 <th>KSEB Consumer #</th>
+                <th>Type</th>
                 <th>Wattage (W)</th>
                 <th>Panels Sold</th>
                 <th>Unit Price (₹)</th>
@@ -542,13 +550,13 @@ export const SalesPage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '30px' }}>
                     Loading sales records...
                   </td>
                 </tr>
               ) : sales.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     No sales recorded matching current filters.
                   </td>
                 </tr>
@@ -563,6 +571,9 @@ export const SalesPage: React.FC = () => {
                       <span style={{ fontFamily: 'monospace', color: 'var(--color-primary)', fontWeight: 600 }}>
                         {s.consumerNumber}
                       </span>
+                    </td>
+                    <td>
+                      <Badge variant={s.type === 'DCR' ? 'success' : 'warning'}>{s.type || 'DCR'}</Badge>
                     </td>
                     <td>
                       <strong>{s.panelWattage}W</strong>
@@ -676,7 +687,24 @@ export const SalesPage: React.FC = () => {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+            <div className="form-group">
+              <label className="form-label">Panel Type *</label>
+              <select
+                className="form-select"
+                value={formData.type}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    type: e.target.value as PanelType,
+                  })
+                }
+              >
+                <option value="DCR">DCR</option>
+                <option value="Non DCR">Non DCR</option>
+              </select>
+            </div>
+
             <div className="form-group">
               <label className="form-label">Panel Wattage (W) *</label>
               <select
@@ -1019,6 +1047,10 @@ export const SalesPage: React.FC = () => {
                 </strong>
               </div>
               <div>
+                <span style={{ color: 'var(--text-muted)' }}>Panel Type: </span>
+                <strong>{formData.type}</strong>
+              </div>
+              <div>
                 <span style={{ color: 'var(--text-muted)' }}>Wattage: </span>
                 <strong>{formData.panelWattage}W</strong>
               </div>
@@ -1080,6 +1112,12 @@ export const SalesPage: React.FC = () => {
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Wattage:</span>
               <div>{viewSale.panelWattage}W</div>
+            </div>
+            <div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Panel Type:</span>
+              <div>
+                <Badge variant={viewSale.type === 'DCR' ? 'success' : 'warning'}>{viewSale.type || 'DCR'}</Badge>
+              </div>
             </div>
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Quantity:</span>

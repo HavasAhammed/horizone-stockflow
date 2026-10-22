@@ -54,6 +54,9 @@ void main() async {
     apiService: apiService,
   );
 
+  // Ensure existing local data has type defaulted to DCR
+  await inventoryService.migrateExistingDataToDcr();
+
   // Seed sample data on first run for out-of-the-box demonstration
   await inventoryService.seedIfEmpty();
 

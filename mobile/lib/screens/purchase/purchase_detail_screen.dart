@@ -347,27 +347,53 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                           ),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryBlueLight,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '${_purchase.wattage}W',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primaryBlue,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _purchase.type == 'DCR'
+                                  ? AppColors.solarGreenLight
+                                  : AppColors.solarAmberLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              _purchase.type,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: _purchase.type == 'DCR'
+                                    ? AppColors.solarGreenDark
+                                    : AppColors.solarAmberDark,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlueLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${_purchase.wattage}W',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                   const Divider(height: 24),
                   _infoRow('Purchase Date',
                       Formatters.formatDate(_purchase.purchaseDate)),
+                  _infoRow('Panel Type', _purchase.type),
                   _infoRow(
                       'Supplier', _purchase.supplierName ?? 'Not specified'),
                   _infoRow('Quantity', '${_purchase.quantity} Panels'),

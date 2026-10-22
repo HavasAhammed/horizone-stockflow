@@ -219,11 +219,32 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                           ],
                         ),
                       ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _sale.type == 'DCR'
+                              ? AppColors.solarGreenLight
+                              : AppColors.solarAmberLight,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _sale.type,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: _sale.type == 'DCR'
+                                ? AppColors.solarGreenDark
+                                : AppColors.solarAmberDark,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const Divider(height: 24),
                   _infoRow(
                       'Sale Date', Formatters.formatDate(_sale.saleDate)),
+                  _infoRow('Panel Type', _sale.type),
                   _infoRow('Panel Wattage', '${_sale.panelWattage}W'),
                   _infoRow('Dispatched Quantity',
                       '${_sale.quantity} Panels'),

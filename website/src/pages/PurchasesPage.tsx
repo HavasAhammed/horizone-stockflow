@@ -16,7 +16,7 @@ import {
   PackagePlus,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import type { PurchaseTransaction } from '../types';
+import type { PurchaseTransaction, PanelType } from '../types';
 import { Modal } from '../components/Modal';
 import { Badge } from '../components/Badge';
 import { WebBarcodeScannerModal } from '../components/WebBarcodeScannerModal';
@@ -59,6 +59,7 @@ export const PurchasesPage: React.FC = () => {
     supplierName: '',
     batchNumber: '',
     wattage: 540,
+    type: 'DCR' as PanelType,
     quantity: 1,
     unitPurchasePrice: 11500,
     notes: '',
@@ -246,6 +247,7 @@ export const PurchasesPage: React.FC = () => {
         supplierName: formData.supplierName.trim() || undefined,
         batchNumber: formData.batchNumber.trim(),
         wattage: Number(formData.wattage),
+        type: formData.type,
         quantity: Number(formData.quantity),
         serialNumbers: serials,
         unitPurchasePrice: Number(formData.unitPurchasePrice),
@@ -259,6 +261,7 @@ export const PurchasesPage: React.FC = () => {
         supplierName: '',
         batchNumber: '',
         wattage: 540,
+        type: 'DCR' as PanelType,
         quantity: 1,
         unitPurchasePrice: 11500,
         notes: '',
@@ -507,6 +510,7 @@ export const PurchasesPage: React.FC = () => {
                 <th>Date</th>
                 <th>Batch Number</th>
                 <th>Supplier</th>
+                <th>Type</th>
                 <th>Wattage (W)</th>
                 <th>Quantity</th>
                 <th>Unit Price (₹)</th>
@@ -517,13 +521,13 @@ export const PurchasesPage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '30px' }}>
                     Loading purchases...
                   </td>
                 </tr>
               ) : purchases.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                     No purchase transactions matching current criteria.
                   </td>
                 </tr>
@@ -535,6 +539,9 @@ export const PurchasesPage: React.FC = () => {
                       <strong>{p.batchNumber}</strong>
                     </td>
                     <td>{p.supplierName || '—'}</td>
+                    <td>
+                      <Badge variant={p.type === 'DCR' ? 'success' : 'warning'}>{p.type || 'DCR'}</Badge>
+                    </td>
                     <td>
                       <strong>{p.wattage}W</strong>
                     </td>
@@ -617,14 +624,15 @@ export const PurchasesPage: React.FC = () => {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="form-group">
-              <label className="form-label">Supplier Name / Reference</label>
-              <input
-                type="text"
-                placeholder="e.g. Tata Power Solar Systems"
+              <label className="form-label">Panel Type *</label>
+              <select
                 className="form-input"
-                value={formData.supplierName}
-                onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
-              />
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value as PanelType })}
+              >
+                <option value="DCR">DCR</option>
+                <option value="Non DCR">Non DCR</option>
+              </select>
             </div>
 
             <div className="form-group">
@@ -1138,6 +1146,12 @@ export const PurchasesPage: React.FC = () => {
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Supplier:</span>
               <div>{viewPurchase.supplierName || '—'}</div>
+            </div>
+            <div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Panel Type:</span>
+              <div>
+                <Badge variant={viewPurchase.type === 'DCR' ? 'success' : 'warning'}>{viewPurchase.type || 'DCR'}</Badge>
+              </div>
             </div>
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Wattage:</span>

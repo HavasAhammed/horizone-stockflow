@@ -31,6 +31,7 @@ class _EditPurchaseScreenState extends State<EditPurchaseScreen> {
   final _searchSerialController = TextEditingController();
 
   late DateTime _purchaseDate;
+  late String _selectedType;
   late List<String> _serials;
   final Map<String, PanelStatus> _panelStatuses = {};
   bool _isLoadingPanels = true;
@@ -47,6 +48,7 @@ class _EditPurchaseScreenState extends State<EditPurchaseScreen> {
         text: widget.purchase.unitPurchasePrice.toStringAsFixed(0));
     _notesController = TextEditingController(text: widget.purchase.notes ?? '');
     _purchaseDate = widget.purchase.purchaseDate;
+    _selectedType = widget.purchase.type;
     _serials = List<String>.from(widget.purchase.serialNumbers);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -536,6 +538,7 @@ class _EditPurchaseScreenState extends State<EditPurchaseScreen> {
         purchaseDate: _purchaseDate,
         supplierName: supplier.isEmpty ? null : supplier,
         batchNumber: batch,
+        type: _selectedType,
         unitPurchasePrice: price,
         notes: notes.isEmpty ? null : notes,
         serialNumbers: _serials,
@@ -653,6 +656,51 @@ class _EditPurchaseScreenState extends State<EditPurchaseScreen> {
                         labelText: 'Supplier / Manufacturer',
                         prefixIcon: Icon(Icons.business_outlined),
                       ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Panel Type & Wattage
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: _selectedType,
+                            decoration: const InputDecoration(
+                              labelText: 'Panel Type *',
+                              prefixIcon: Icon(Icons.solar_power),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'DCR',
+                                child: Text('DCR'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'Non DCR',
+                                child: Text('Non DCR'),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedType = val);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Wattage',
+                              prefixIcon: Icon(Icons.bolt_outlined),
+                            ),
+                            child: Text(
+                              '${widget.purchase.wattage} W',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 14),
 

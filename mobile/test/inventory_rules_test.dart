@@ -66,8 +66,13 @@ class InMemoryPanelRepository implements PanelRepository {
   @override
   Future<PanelItem?> getPanelBySerialNumber(String sn) async => _store[sn];
   @override
-  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async =>
-      _store.values.where((p) => p.wattage == wattage && p.isAvailable).toList();
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage, {String? type}) async =>
+      _store.values
+          .where((p) =>
+              p.wattage == wattage &&
+              p.isAvailable &&
+              (type == null || p.type == type))
+          .toList();
   @override
   Future<void> savePanel(PanelItem p) async => _store[p.serialNumber] = p;
   @override
@@ -375,6 +380,70 @@ void main() {
       final p3 = await panelRepo.getPanelBySerialNumber('HZ-SALEUPD-3');
       expect(p3!.isSold, true);
       expect(p3.saleId, sale.id);
+    });
+
+    test('enforces panel type matching (DCR vs Non DCR) in purchases and sales', () async {
+      final cust = await service.createCustomer(
+        consumerNumber: '1155443322999',
+        phone: '9847099999',
+        name: 'DCR Customer',
+      );
+
+      // Inward DCR and Non DCR batches
+      await service.createPurchase(
+        batchNumber: 'BATCH-DCR',
+        wattage: 540,
+        type: 'DCR',
+        quantity: 1,
+        serialNumbers: ['SN-DCR-1'],
+        unitPurchasePrice: 12000,
+      );
+
+      await service.createPurchase(
+        batchNumber: 'BATCH-NONDCR',
+        wattage: 540,
+        type: 'Non DCR',
+        quantity: 1,
+        serialNumbers: ['SN-NON-1'],
+        unitPurchasePrice: 10000,
+      );
+
+      // Panel objects inherit type
+      final dcrPanel = await panelRepo.getPanelBySerialNumber('SN-DCR-1');
+      expect(dcrPanel!.type, 'DCR');
+
+      final nonDcrPanel = await panelRepo.getPanelBySerialNumber('SN-NON-1');
+      expect(nonDcrPanel!.type, 'Non DCR');
+
+      // Sale for DCR cannot include Non DCR panel
+      expect(
+        () => service.createSale(
+          customerId: cust.id,
+          panelWattage: 540,
+          type: 'DCR',
+          serialNumbers: ['SN-NON-1'],
+          unitSellingPrice: 15000,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      // Sale for DCR with DCR panel succeeds
+      final sale = await service.createSale(
+        customerId: cust.id,
+        panelWattage: 540,
+        type: 'DCR',
+        serialNumbers: ['SN-DCR-1'],
+        unitSellingPrice: 15000,
+      );
+      expect(sale.type, 'DCR');
+      expect(sale.serialNumbers, ['SN-DCR-1']);
+
+      // Available panels filter by type correctly
+      final dcrAvailable = await service.getAvailablePanelsByWattage(540, type: 'DCR');
+      expect(dcrAvailable.length, 0); // sold
+      final nonDcrAvailable = await service.getAvailablePanelsByWattage(540, type: 'Non DCR');
+      expect(nonDcrAvailable.length, 1);
+      expect(nonDcrAvailable.first.serialNumber, 'SN-NON-1');
     });
   });
 }

@@ -9,6 +9,7 @@ import {
   PurchaseTransaction,
   SaleTransaction,
   PanelItem,
+  PanelType,
   StockByWattage,
   StockByBatch,
   DashboardSummary,
@@ -34,6 +35,13 @@ export class DataService {
         await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 8000 });
         console.log('⚡ Connected to MongoDB Atlas:', mongoose.connection.name);
       }
+
+      // Ensure all existing documents without type have type set to 'DCR'
+      await Promise.all([
+        PanelModel.updateMany({ $or: [{ type: { $exists: false } }, { type: null }, { type: '' }] }, { $set: { type: 'DCR' } }),
+        PurchaseModel.updateMany({ $or: [{ type: { $exists: false } }, { type: null }, { type: '' }] }, { $set: { type: 'DCR' } }),
+        SaleModel.updateMany({ $or: [{ type: { $exists: false } }, { type: null }, { type: '' }] }, { $set: { type: 'DCR' } }),
+      ]).catch((e) => console.warn('Type migration notice:', e.message));
 
       const customerCount = await CustomerModel.countDocuments();
       if (customerCount > 0) {
@@ -79,6 +87,7 @@ export class DataService {
             serialNumber: p.serialNumber,
             batchNumber: p.batchNumber,
             wattage: p.wattage,
+            type: ((p as any).type || (p as any).panelType || 'DCR') as PanelType,
             purchaseId: p.purchaseId,
             purchasePrice: p.purchasePrice,
             status: p.status as 'available' | 'sold',
@@ -98,6 +107,7 @@ export class DataService {
             supplierName: pu.supplierName,
             batchNumber: pu.batchNumber,
             wattage: pu.wattage,
+            type: ((pu as any).type || (pu as any).panelType || 'DCR') as PanelType,
             quantity: pu.quantity,
             serialNumbers: pu.serialNumbers,
             unitPurchasePrice: pu.unitPurchasePrice,
@@ -119,6 +129,7 @@ export class DataService {
             consumerNumber: s.consumerNumber,
             customerName: s.customerName,
             panelWattage: s.panelWattage,
+            type: ((s as any).type || (s as any).panelType || 'DCR') as PanelType,
             quantity: s.quantity,
             serialNumbers: s.serialNumbers,
             unitSellingPrice: s.unitSellingPrice,
@@ -349,6 +360,7 @@ export class DataService {
     supplierName?: string;
     batchNumber: string;
     wattage: number;
+    type?: PanelType | string;
     quantity: number;
     serialNumbers: string[];
     unitPurchasePrice: number;
@@ -363,6 +375,9 @@ export class DataService {
     if (isNaN(wattage) || wattage <= 0) {
       throw new Error('Wattage must be a positive integer in Watts.');
     }
+
+    const panelType: PanelType =
+      data.type && data.type.trim().toUpperCase() === 'NON DCR' ? 'Non DCR' : 'DCR';
 
     const quantity = Math.floor(Number(data.quantity));
     if (isNaN(quantity) || quantity <= 0) {
@@ -413,6 +428,7 @@ export class DataService {
       supplierName: data.supplierName?.trim() || undefined,
       batchNumber,
       wattage,
+      type: panelType,
       quantity,
       serialNumbers: serials,
       unitPurchasePrice,
@@ -433,6 +449,7 @@ export class DataService {
         serialNumber: sn,
         batchNumber,
         wattage,
+        type: panelType,
         purchaseId: purchase.id,
         purchasePrice: unitPurchasePrice,
         status: 'available',
@@ -462,6 +479,7 @@ export class DataService {
       purchaseDate?: string;
       supplierName?: string;
       batchNumber?: string;
+      type?: PanelType | string;
       unitPurchasePrice?: number;
       notes?: string;
       serialNumbers?: string[];
@@ -477,6 +495,23 @@ export class DataService {
     }
     if (data.supplierName !== undefined) {
       purchase.supplierName = data.supplierName.trim() || undefined;
+    }
+    if (data.type !== undefined) {
+      const panelType: PanelType =
+        data.type.trim().toUpperCase() === 'NON DCR' ? 'Non DCR' : 'DCR';
+      purchase.type = panelType;
+      for (const sn of purchase.serialNumbers) {
+        const p = this.panels.get(sn);
+        if (p) {
+          p.type = panelType;
+        }
+      }
+      if (mongoose.connection.readyState === 1) {
+        PanelModel.updateMany(
+          { serialNumber: { $in: purchase.serialNumbers } },
+          { type: panelType, updatedAt: new Date().toISOString() }
+        ).catch((e) => console.warn('Mongo update panels type err:', e.message));
+      }
     }
     if (data.batchNumber !== undefined) {
       const batchNumber = data.batchNumber.trim();
@@ -553,6 +588,7 @@ export class DataService {
           serialNumber: sn,
           batchNumber: purchase.batchNumber,
           wattage: purchase.wattage,
+          type: purchase.type || 'DCR',
           purchaseId: purchase.id,
           purchasePrice: purchase.unitPurchasePrice,
           status: 'available',
@@ -765,6 +801,7 @@ export class DataService {
     saleDate?: string;
     customerId: string;
     panelWattage: number;
+    type?: PanelType | string;
     serialNumbers: string[];
     unitSellingPrice: number;
     notes?: string;
@@ -778,6 +815,9 @@ export class DataService {
     if (isNaN(wattage) || wattage <= 0) {
       throw new Error('Panel wattage must be a positive integer in Watts.');
     }
+
+    const saleType: PanelType =
+      data.type && data.type.trim().toUpperCase() === 'NON DCR' ? 'Non DCR' : 'DCR';
 
     const rawSerials = Array.isArray(data.serialNumbers) ? data.serialNumbers : [];
     const serials = rawSerials.map((s) => s.trim()).filter((s) => s.length > 0);
@@ -797,7 +837,7 @@ export class DataService {
       throw new Error('Unit selling price cannot be negative.');
     }
 
-    // Verify all selected serials exist, match requested wattage, and are CURRENTLY AVAILABLE
+    // Verify all selected serials exist, match requested wattage and type, and are CURRENTLY AVAILABLE
     for (const sn of serials) {
       const panel = this.panels.get(sn);
       if (!panel) {
@@ -811,6 +851,12 @@ export class DataService {
       if (panel.wattage !== wattage) {
         throw new Error(
           `Panel serial "${sn}" is ${panel.wattage}W, which does not match requested sale wattage ${wattage}W.`
+        );
+      }
+      const pType = panel.type || 'DCR';
+      if (pType !== saleType) {
+        throw new Error(
+          `Panel serial "${sn}" is ${pType}, which does not match requested sale type ${saleType}.`
         );
       }
     }
@@ -827,6 +873,7 @@ export class DataService {
       consumerNumber: customer.consumerNumber,
       customerName: customer.name,
       panelWattage: wattage,
+      type: saleType,
       quantity,
       serialNumbers: serials,
       unitSellingPrice,
@@ -865,6 +912,7 @@ export class DataService {
     data: {
       saleDate?: string;
       customerId?: string;
+      type?: PanelType | string;
       unitSellingPrice?: number;
       serialNumbers?: string[];
       notes?: string;
@@ -888,6 +936,9 @@ export class DataService {
     if (data.saleDate) {
       sale.saleDate = new Date(data.saleDate).toISOString();
     }
+    if (data.type !== undefined) {
+      sale.type = data.type.trim().toUpperCase() === 'NON DCR' ? 'Non DCR' : 'DCR';
+    }
     if (data.notes !== undefined) {
       sale.notes = data.notes.trim() || undefined;
     }
@@ -908,7 +959,7 @@ export class DataService {
       // Panels added to sale
       const addedSerials = newSerials.filter((sn) => !sale.serialNumbers.includes(sn));
 
-      // Validate added serials are currently available and match wattage
+      // Validate added serials are currently available and match wattage & type
       for (const sn of addedSerials) {
         const panel = this.panels.get(sn);
         if (!panel) throw new Error(`Serial "${sn}" not found in inventory.`);
@@ -918,6 +969,12 @@ export class DataService {
         if (panel.wattage !== sale.panelWattage) {
           throw new Error(
             `Serial "${sn}" has wattage ${panel.wattage}W, expected ${sale.panelWattage}W.`
+          );
+        }
+        const pType = panel.type || 'DCR';
+        if (pType !== sale.type) {
+          throw new Error(
+            `Serial "${sn}" is ${pType}, expected ${sale.type}.`
           );
         }
       }
@@ -1012,6 +1069,7 @@ export class DataService {
   public getAllPanels(filters?: {
     wattage?: number;
     batchNumber?: string;
+    type?: string;
     status?: 'available' | 'sold';
     search?: string;
   }): PanelItem[] {
@@ -1023,6 +1081,9 @@ export class DataService {
       }
       if (filters.batchNumber) {
         result = result.filter((p) => p.batchNumber.toLowerCase() === filters.batchNumber!.toLowerCase());
+      }
+      if (filters.type) {
+        result = result.filter((p) => (p.type || 'DCR').toLowerCase() === filters.type!.toLowerCase());
       }
       if (filters.status) {
         result = result.filter((p) => p.status === filters.status);
@@ -1040,10 +1101,13 @@ export class DataService {
     return result.sort((a, b) => a.serialNumber.localeCompare(b.serialNumber));
   }
 
-  public getAvailablePanelsByWattage(wattage: number): PanelItem[] {
-    return Array.from(this.panels.values()).filter(
-      (p) => p.wattage === wattage && p.status === 'available'
-    );
+  public getAvailablePanelsByWattage(wattage: number, type?: string): PanelItem[] {
+    return Array.from(this.panels.values()).filter((p) => {
+      const matchesWattage = p.wattage === wattage;
+      const matchesStatus = p.status === 'available';
+      const matchesType = !type || (p.type || 'DCR').toLowerCase() === type.toLowerCase();
+      return matchesWattage && matchesStatus && matchesType;
+    });
   }
 
   public getStockByWattage(): StockByWattage[] {

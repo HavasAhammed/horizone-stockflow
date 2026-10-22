@@ -1,10 +1,13 @@
 export type PanelStatus = 'available' | 'sold';
 
+export type PanelType = 'DCR' | 'Non DCR';
+
 export interface PanelItem {
   id: string;
   serialNumber: string;
   batchNumber: string;
   wattage: number; // in Watts (W)
+  type: PanelType; // 'DCR' | 'Non DCR'
   purchaseId: string;
   purchasePrice: number; // in INR
   status: PanelStatus;
@@ -29,6 +32,7 @@ export interface PurchaseTransaction {
   supplierName?: string;
   batchNumber: string;
   wattage: number; // in Watts (W)
+  type: PanelType; // 'DCR' | 'Non DCR'
   quantity: number;
   serialNumbers: string[];
   unitPurchasePrice: number;
@@ -45,6 +49,7 @@ export interface SaleTransaction {
   consumerNumber: string; // KSEB Consumer confirmation
   customerName?: string;
   panelWattage: number; // in Watts (W)
+  type: PanelType; // 'DCR' | 'Non DCR'
   quantity: number; // derived from serialNumbers.length
   serialNumbers: string[];
   unitSellingPrice: number;

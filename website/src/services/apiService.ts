@@ -3,6 +3,7 @@ import type {
   PurchaseTransaction,
   SaleTransaction,
   PanelItem,
+  PanelType,
   StockByWattage,
   StockByBatch,
   DashboardSummary,
@@ -103,10 +104,11 @@ class ApiService {
   }
 
   // Purchases
-  public async getPurchases(filters?: { batch?: string; wattage?: number; search?: string }): Promise<PurchaseTransaction[]> {
+  public async getPurchases(filters?: { batch?: string; wattage?: number; type?: PanelType; search?: string }): Promise<PurchaseTransaction[]> {
     const params = new URLSearchParams();
     if (filters?.batch) params.append('batch', filters.batch);
     if (filters?.wattage) params.append('wattage', String(filters.wattage));
+    if (filters?.type) params.append('type', filters.type);
     if (filters?.search) params.append('search', filters.search);
     const qs = params.toString() ? `?${params.toString()}` : '';
     return this.request<PurchaseTransaction[]>(`/purchases${qs}`);
@@ -121,6 +123,7 @@ class ApiService {
     supplierName?: string;
     batchNumber: string;
     wattage: number;
+    type?: PanelType;
     quantity: number;
     serialNumbers: string[];
     unitPurchasePrice: number;
@@ -147,10 +150,11 @@ class ApiService {
   }
 
   // Sales
-  public async getSales(filters?: { customerId?: string; wattage?: number; search?: string }): Promise<SaleTransaction[]> {
+  public async getSales(filters?: { customerId?: string; wattage?: number; type?: PanelType; search?: string }): Promise<SaleTransaction[]> {
     const params = new URLSearchParams();
     if (filters?.customerId) params.append('customerId', filters.customerId);
     if (filters?.wattage) params.append('wattage', String(filters.wattage));
+    if (filters?.type) params.append('type', filters.type);
     if (filters?.search) params.append('search', filters.search);
     const qs = params.toString() ? `?${params.toString()}` : '';
     return this.request<SaleTransaction[]>(`/sales${qs}`);
@@ -164,6 +168,7 @@ class ApiService {
     saleDate?: string;
     customerId: string;
     panelWattage: number;
+    type?: PanelType;
     serialNumbers: string[];
     unitSellingPrice: number;
     notes?: string;
@@ -191,12 +196,14 @@ class ApiService {
   // Inventory
   public async getInventory(filters?: {
     wattage?: number;
+    type?: PanelType;
     batch?: string;
     status?: 'available' | 'sold';
     search?: string;
   }): Promise<PanelItem[]> {
     const params = new URLSearchParams();
     if (filters?.wattage) params.append('wattage', String(filters.wattage));
+    if (filters?.type) params.append('type', filters.type);
     if (filters?.batch) params.append('batch', filters.batch);
     if (filters?.status) params.append('status', filters.status);
     if (filters?.search) params.append('search', filters.search);
@@ -204,8 +211,9 @@ class ApiService {
     return this.request<PanelItem[]>(`/inventory${qs}`);
   }
 
-  public async getAvailablePanelsByWattage(wattage: number): Promise<PanelItem[]> {
-    return this.request<PanelItem[]>(`/inventory/available/${wattage}`);
+  public async getAvailablePanelsByWattage(wattage: number, type?: PanelType): Promise<PanelItem[]> {
+    const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+    return this.request<PanelItem[]>(`/inventory/available/${wattage}${qs}`);
   }
 
   public async getStockByWattage(): Promise<StockByWattage[]> {

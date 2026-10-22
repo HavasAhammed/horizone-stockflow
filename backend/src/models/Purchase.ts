@@ -6,6 +6,7 @@ export interface IPurchaseDoc extends Document {
   supplierName?: string;
   batchNumber: string;
   wattage: number;
+  type: string;
   quantity: number;
   serialNumbers: string[];
   unitPurchasePrice: number;
@@ -22,6 +23,12 @@ const purchaseSchema = new Schema<IPurchaseDoc>(
     supplierName: { type: String },
     batchNumber: { type: String, required: true, index: true },
     wattage: { type: Number, required: true },
+    type: {
+      type: String,
+      enum: ['DCR', 'Non DCR'],
+      default: 'DCR',
+      index: true,
+    },
     quantity: { type: Number, required: true },
     serialNumbers: { type: [String], required: true },
     unitPurchasePrice: { type: Number, required: true },

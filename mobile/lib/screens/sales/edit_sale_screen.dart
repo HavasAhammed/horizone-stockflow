@@ -67,8 +67,11 @@ class _EditSaleScreenState extends State<EditSaleScreen> {
       final inv = context.read<InventoryProvider>();
       await inv.loadPanels();
 
-      // Panels available for this wattage
-      final available = await inv.getAvailablePanelsByWattage(widget.sale.panelWattage);
+      // Panels available for this wattage and type
+      final available = await inv.getAvailablePanelsByWattage(
+        widget.sale.panelWattage,
+        type: widget.sale.type,
+      );
 
       // Current panels in this sale (some might have status sold)
       final currentList = <PanelItem>[];
@@ -87,6 +90,7 @@ class _EditSaleScreenState extends State<EditSaleScreen> {
               serialNumber: sn,
               batchNumber: 'N/A',
               wattage: widget.sale.panelWattage,
+              type: widget.sale.type,
               purchaseId: '',
               purchasePrice: 0,
               status: PanelStatus.sold,
@@ -236,6 +240,7 @@ class _EditSaleScreenState extends State<EditSaleScreen> {
                 MaterialPageRoute(
                   builder: (_) => SaleBarcodeScannerScreen(
                     wattage: widget.sale.panelWattage,
+                    type: widget.sale.type,
                     availablePanels: _availableAndCurrentPanels,
                     initiallySelectedSerials: _selectedSerials,
                     allInventoryPanels: inv.allPanels,
@@ -276,22 +281,48 @@ class _EditSaleScreenState extends State<EditSaleScreen> {
                             color: AppColors.textMain,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryBlueLight,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${widget.sale.panelWattage}W Mono PERC',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primaryBlue,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: widget.sale.type == 'DCR'
+                                    ? AppColors.solarGreenLight
+                                    : AppColors.solarAmberLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              widget.sale.type,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: widget.sale.type == 'DCR'
+                                    ? AppColors.solarGreenDark
+                                    : AppColors.solarAmberDark,
+                              ),
                             ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryBlueLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${widget.sale.panelWattage}W Mono PERC',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryBlue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -426,31 +457,34 @@ class _EditSaleScreenState extends State<EditSaleScreen> {
                     const SizedBox(height: 12),
 
                     // Filter tabs (All, Selected, Unselected)
-                    Row(
-                      children: [
-                        ChoiceChip(
-                          label: Text('All (${_availableAndCurrentPanels.length})'),
-                          selected: _filterTab == 'all',
-                          onSelected: (_) =>
-                              setState(() => _filterTab = 'all'),
-                        ),
-                        const SizedBox(width: 6),
-                        ChoiceChip(
-                          label: Text('Selected (${_selectedSerials.length})'),
-                          selected: _filterTab == 'selected',
-                          selectedColor: AppColors.solarGreenLight,
-                          onSelected: (_) =>
-                              setState(() => _filterTab = 'selected'),
-                        ),
-                        const SizedBox(width: 6),
-                        ChoiceChip(
-                          label: Text(
-                              'Available (${_availableAndCurrentPanels.length - _selectedSerials.length})'),
-                          selected: _filterTab == 'unselected',
-                          onSelected: (_) =>
-                              setState(() => _filterTab = 'unselected'),
-                        ),
-                      ],
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ChoiceChip(
+                            label: Text('All (${_availableAndCurrentPanels.length})'),
+                            selected: _filterTab == 'all',
+                            onSelected: (_) =>
+                                setState(() => _filterTab = 'all'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: Text('Selected (${_selectedSerials.length})'),
+                            selected: _filterTab == 'selected',
+                            selectedColor: AppColors.solarGreenLight,
+                            onSelected: (_) =>
+                                setState(() => _filterTab = 'selected'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: Text(
+                                'Available (${_availableAndCurrentPanels.length - _selectedSerials.length})'),
+                            selected: _filterTab == 'unselected',
+                            onSelected: (_) =>
+                                setState(() => _filterTab = 'unselected'),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
 

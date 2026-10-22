@@ -174,6 +174,7 @@ class ApiService {
     String? supplierName,
     required String batchNumber,
     required int wattage,
+    String type = 'DCR',
     required int quantity,
     required List<String> serialNumbers,
     required double unitPurchasePrice,
@@ -184,6 +185,7 @@ class ApiService {
       if (supplierName != null && supplierName.trim().isNotEmpty) 'supplierName': supplierName.trim(),
       'batchNumber': batchNumber.trim(),
       'wattage': wattage,
+      'type': type,
       'quantity': quantity,
       'serialNumbers': serialNumbers,
       'unitPurchasePrice': unitPurchasePrice,
@@ -200,6 +202,7 @@ class ApiService {
     DateTime? purchaseDate,
     String? supplierName,
     String? batchNumber,
+    String? type,
     double? unitPurchasePrice,
     String? notes,
     List<String>? serialNumbers,
@@ -208,6 +211,7 @@ class ApiService {
       if (purchaseDate != null) 'purchaseDate': purchaseDate.toIso8601String(),
       if (supplierName != null && supplierName.trim().isNotEmpty) 'supplierName': supplierName.trim(),
       if (batchNumber != null && batchNumber.trim().isNotEmpty) 'batchNumber': batchNumber.trim(),
+      if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
       'unitPurchasePrice': ?unitPurchasePrice,
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
       'serialNumbers': ?serialNumbers,
@@ -275,6 +279,7 @@ class ApiService {
     DateTime? saleDate,
     required String customerId,
     required int panelWattage,
+    String type = 'DCR',
     required List<String> serialNumbers,
     required double unitSellingPrice,
     String? notes,
@@ -283,6 +288,7 @@ class ApiService {
       'saleDate': (saleDate ?? DateTime.now()).toIso8601String(),
       'customerId': customerId,
       'panelWattage': panelWattage,
+      'type': type,
       'serialNumbers': serialNumbers,
       'unitSellingPrice': unitSellingPrice,
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
@@ -297,6 +303,7 @@ class ApiService {
     String id, {
     DateTime? saleDate,
     String? customerId,
+    String? type,
     double? unitSellingPrice,
     List<String>? serialNumbers,
     String? notes,
@@ -304,6 +311,7 @@ class ApiService {
     final payload = jsonEncode({
       if (saleDate != null) 'saleDate': saleDate.toIso8601String(),
       'customerId': ?customerId,
+      if (type != null && type.trim().isNotEmpty) 'type': type.trim(),
       'unitSellingPrice': ?unitSellingPrice,
       'serialNumbers': ?serialNumbers,
       if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
@@ -325,12 +333,14 @@ class ApiService {
   Future<List<PanelItem>> getInventory({
     int? wattage,
     String? batch,
+    String? type,
     String? status,
     String? search,
   }) async {
     final params = <String, dynamic>{};
     if (wattage != null) params['wattage'] = wattage;
     if (batch != null && batch.isNotEmpty) params['batch'] = batch;
+    if (type != null && type.isNotEmpty) params['type'] = type;
     if (status != null && status.isNotEmpty) params['status'] = status;
     if (search != null && search.isNotEmpty) params['search'] = search;
 
@@ -339,8 +349,10 @@ class ApiService {
     return data.map((item) => PanelItem.fromMap(item as Map<dynamic, dynamic>)).toList();
   }
 
-  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage) async {
-    final res = await _client.get(_uri('/inventory/available/$wattage'), headers: _headers).timeout(_timeout);
+  Future<List<PanelItem>> getAvailablePanelsByWattage(int wattage, {String? type}) async {
+    final params = <String, dynamic>{};
+    if (type != null && type.isNotEmpty) params['type'] = type;
+    final res = await _client.get(_uri('/inventory/available/$wattage', params), headers: _headers).timeout(_timeout);
     final data = _handleResponse(res) as List;
     return data.map((item) => PanelItem.fromMap(item as Map<dynamic, dynamic>)).toList();
   }

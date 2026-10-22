@@ -201,20 +201,34 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              p.batchNumber,
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w700,
-                                                color: AppColors.textMain,
+                                            Expanded(
+                                              child: Text(
+                                                p.batchNumber,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.textMain,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            BadgeWidget(
-                                              text: '${p.wattage}W',
-                                              type: BadgeType.info,
+                                            const SizedBox(width: 8),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                BadgeWidget(
+                                                  text: p.type,
+                                                  type: p.type == 'DCR'
+                                                      ? BadgeType.success
+                                                      : BadgeType.warning,
+                                                ),
+                                                const SizedBox(width: 6),
+                                                BadgeWidget(
+                                                  text: '${p.wattage}W',
+                                                  type: BadgeType.info,
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
@@ -231,13 +245,17 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
                                           mainAxisAlignment:
                                               MainAxisAlignment.spaceBetween,
                                           children: [
-                                            Text(
-                                              '${p.quantity} panels • ${Formatters.formatDate(p.purchaseDate)}',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: AppColors.textSecondary,
+                                            Expanded(
+                                              child: Text(
+                                                '${p.quantity} panels • ${Formatters.formatDate(p.purchaseDate)}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppColors.textSecondary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
+                                            const SizedBox(width: 8),
                                             Text(
                                               Formatters.formatCurrency(
                                                   p.totalPurchaseAmount),
@@ -262,6 +280,7 @@ class _PurchaseListScreenState extends State<PurchaseListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'purchase_list_fab',
         backgroundColor: AppColors.solarAmber,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),

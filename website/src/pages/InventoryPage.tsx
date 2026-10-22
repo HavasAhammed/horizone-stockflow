@@ -153,6 +153,7 @@ export const InventoryPage: React.FC = () => {
                   <tr>
                     <th>Serial Number</th>
                     <th>Batch Number</th>
+                    <th>Type</th>
                     <th>Wattage</th>
                     <th>Status</th>
                     <th>Inward Date</th>
@@ -163,14 +164,14 @@ export const InventoryPage: React.FC = () => {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '30px' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '30px' }}>
                         Loading inventory...
                       </td>
                     </tr>
                   ) : panels.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}
                       >
                         No panels match current filter criteria.
@@ -191,6 +192,9 @@ export const InventoryPage: React.FC = () => {
                           </span>
                         </td>
                         <td>{p.batchNumber}</td>
+                        <td>
+                          <Badge variant={p.type === 'DCR' ? 'success' : 'warning'}>{p.type || 'DCR'}</Badge>
+                        </td>
                         <td>
                           <strong>{p.wattage}W</strong>
                         </td>

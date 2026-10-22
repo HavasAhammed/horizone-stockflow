@@ -3,7 +3,7 @@ import { dataService } from '../services/dataService.js';
 
 export const getSales = (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { customerId, wattage, search } = req.query;
+    const { customerId, wattage, type, search } = req.query;
     let sales = dataService.getAllSales();
 
     if (customerId && typeof customerId === 'string') {
@@ -11,6 +11,9 @@ export const getSales = (req: Request, res: Response, next: NextFunction) => {
     }
     if (wattage && !isNaN(Number(wattage))) {
       sales = sales.filter((s) => s.panelWattage === Number(wattage));
+    }
+    if (type && typeof type === 'string') {
+      sales = sales.filter((s) => (s.type || 'DCR').toLowerCase() === type.toLowerCase());
     }
     if (search && typeof search === 'string') {
       const q = search.toLowerCase().trim();

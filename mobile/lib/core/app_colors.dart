@@ -7,6 +7,7 @@ class AppColors {
   static const Color primaryBlueLight = Color(0xFFEFF6FF);
 
   static const Color solarAmber = Color(0xFFEA8410);
+  static const Color solarAmberDark = Color(0xFFB45309);
   static const Color solarAmberLight = Color(0xFFFFFBEB);
 
   static const Color solarGreen = Color(0xFF10B981);

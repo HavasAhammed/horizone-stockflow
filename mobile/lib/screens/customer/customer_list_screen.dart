@@ -142,6 +142,7 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'customer_list_fab',
         backgroundColor: AppColors.primaryBlue,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.person_add),

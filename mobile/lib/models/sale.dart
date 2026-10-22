@@ -5,6 +5,7 @@ class SaleTransaction {
   final String consumerNumber; // KSEB consumer confirmation
   final String? customerName;
   final int panelWattage; // in Watts (W)
+  final String type; // 'DCR' | 'Non DCR'
   final int quantity; // derived from serialNumbers.length
   final List<String> serialNumbers;
   final double unitSellingPrice;
@@ -20,6 +21,7 @@ class SaleTransaction {
     required this.consumerNumber,
     this.customerName,
     required this.panelWattage,
+    this.type = 'DCR',
     required this.quantity,
     required this.serialNumbers,
     required this.unitSellingPrice,
@@ -37,6 +39,7 @@ class SaleTransaction {
     String? consumerNumber,
     String? customerName,
     int? panelWattage,
+    String? type,
     int? quantity,
     List<String>? serialNumbers,
     double? unitSellingPrice,
@@ -52,6 +55,7 @@ class SaleTransaction {
       consumerNumber: consumerNumber ?? this.consumerNumber,
       customerName: customerName ?? this.customerName,
       panelWattage: panelWattage ?? this.panelWattage,
+      type: type ?? this.type,
       quantity: quantity ?? this.quantity,
       serialNumbers: serialNumbers ?? this.serialNumbers,
       unitSellingPrice: unitSellingPrice ?? this.unitSellingPrice,
@@ -70,6 +74,7 @@ class SaleTransaction {
       'consumerNumber': consumerNumber,
       'customerName': customerName,
       'panelWattage': panelWattage,
+      'type': type,
       'quantity': quantity,
       'serialNumbers': serialNumbers,
       'unitSellingPrice': unitSellingPrice,
@@ -90,6 +95,7 @@ class SaleTransaction {
       consumerNumber: (map['consumerNumber'] ?? '').toString(),
       customerName: map['customerName'] as String?,
       panelWattage: ((map['panelWattage'] ?? 0) as num).toInt(),
+      type: (map['type'] ?? map['panelType'] ?? 'DCR').toString(),
       quantity: ((map['quantity'] ?? 0) as num).toInt(),
       serialNumbers: map['serialNumbers'] != null
           ? List<String>.from((map['serialNumbers'] as List).map((e) => e.toString()))
